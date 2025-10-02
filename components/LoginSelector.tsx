@@ -17,16 +17,16 @@ const RoleCard: React.FC<{ title: string, description: string, icon: React.React
 
 const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
     const [isEmployeeLogin, setEmployeeLogin] = useState(false);
-    const { authenticateEmployee, loading } = useQueueSystem();
+    const { authenticateEmployee } = useQueueSystem();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     
-    const handleEmployeeLogin = async () => {
+    const handleEmployeeLogin = () => {
         setError('');
         if (!username || !password) return;
 
-        const employee = await authenticateEmployee(username, password);
+        const employee = authenticateEmployee(username, password);
         if(employee) {
             onLogin('employee', employee);
         } else {
@@ -57,6 +57,7 @@ const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
                         type="password" 
                         value={password} 
                         onChange={e => setPassword(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleEmployeeLogin()}
                         placeholder="كلمة المرور"
                         className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 text-white focus:ring-sky-500 focus:border-sky-500"
                      />
@@ -64,8 +65,8 @@ const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
                  {error && <p className="text-red-400 text-center mt-4">{error}</p>}
                  <div className="mt-6 flex items-center space-x-4">
                     <Button variant="secondary" onClick={() => setEmployeeLogin(false)} className="w-full">رجوع</Button>
-                    <Button onClick={handleEmployeeLogin} disabled={!username || !password || loading.auth} className="w-full">
-                       {loading.auth ? 'جاري الدخول...' : 'دخول'}
+                    <Button onClick={handleEmployeeLogin} disabled={!username || !password} className="w-full">
+                       دخول
                     </Button>
                  </div>
              </div>

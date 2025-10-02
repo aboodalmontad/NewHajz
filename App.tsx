@@ -46,13 +46,14 @@ function App() {
 function MainApp() {
     const [currentView, setCurrentView] = useState<string | null>('login');
     const [loggedInEmployee, setLoggedInEmployee] = useState<Employee | undefined>();
-    const { state, fetchState } = useQueueSystem();
+    const { state } = useQueueSystem();
 
+    // Effect to auto-logout employee if they are deleted from the system
     useEffect(() => {
-        fetchState(); // Fetch initial state
-        const interval = setInterval(fetchState, 3000); // Poll for updates every 3 seconds
-        return () => clearInterval(interval);
-    }, [fetchState]);
+        if (loggedInEmployee && !state.employees.find(e => e.id === loggedInEmployee.id)) {
+            handleLogout();
+        }
+    }, [state.employees, loggedInEmployee]);
 
     const handleLogin = (view: string, employee?: Employee) => {
         setCurrentView(view);
@@ -64,14 +65,6 @@ function MainApp() {
         setLoggedInEmployee(undefined);
     }
     
-    if (!state) {
-        return (
-            <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-                <div className="text-white text-2xl">جاري تحميل النظام...</div>
-            </div>
-        );
-    }
-
     const renderView = () => {
         switch (currentView) {
             case 'kiosk':
