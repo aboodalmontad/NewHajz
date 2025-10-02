@@ -1,4 +1,3 @@
-
 export enum EmployeeStatus {
   Available = 'متاح',
   Busy = 'مشغول',
@@ -37,4 +36,11 @@ export interface Window {
   employeeId?: number;
   currentCustomerId?: number;
   customTask?: string;
+}
+
+export interface QueueSystemState {
+  customers: Customer[];
+  queue: number[];
+  employees: Employee[];
+  windows: Window[];
 }

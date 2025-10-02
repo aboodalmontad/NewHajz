@@ -1,15 +1,14 @@
-
 import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Customer } from '../types';
 import { Button } from './shared/Button';
 
 const KioskView: React.FC = () => {
-    const { addCustomer } = useQueueSystem();
+    const { addCustomer, loading } = useQueueSystem();
     const [lastTicket, setLastTicket] = useState<Customer | null>(null);
 
-    const handleTakeNumber = () => {
-        const newCustomer = addCustomer();
+    const handleTakeNumber = async () => {
+        const newCustomer = await addCustomer();
         setLastTicket(newCustomer);
     };
 
@@ -19,8 +18,8 @@ const KioskView: React.FC = () => {
                 <>
                     <h1 className="text-5xl font-extrabold text-white mb-4">أهلاً وسهلاً</h1>
                     <p className="text-xl text-slate-300 mb-8">يرجى سحب رقم للدخول إلى الطابور.</p>
-                    <Button size="xl" onClick={handleTakeNumber}>
-                        اسحب رقم
+                    <Button size="xl" onClick={handleTakeNumber} disabled={loading.addCustomer}>
+                        {loading.addCustomer ? 'جاري الإصدار...' : 'اسحب رقم'}
                     </Button>
                 </>
             ) : (

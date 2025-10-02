@@ -1,14 +1,12 @@
-
 import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Button } from './shared/Button';
+import { Employee } from '../types';
 
 interface LoginSelectorProps {
-    onLogin: (view: string, employeeId?: number) => void;
+    onLogin: (view: string, employee?: Employee) => void;
 }
 
-// Fix: Replaced JSX.Element with React.ReactElement to resolve namespace error.
-// Fix: Correctly type the icon prop for React.cloneElement to accept a className.
 const RoleCard: React.FC<{ title: string, description: string, icon: React.ReactElement<{ className?: string }>, onClick: () => void }> = ({ title, description, icon, onClick }) => (
     <div onClick={onClick} className="bg-slate-800 p-6 rounded-lg shadow-lg hover:bg-slate-700 hover:ring-2 hover:ring-sky-500 transition-all cursor-pointer text-center">
         <div className="flex justify-center text-sky-400 mb-4">{React.cloneElement(icon, { className: "h-12 w-12" })}</div>
@@ -19,16 +17,18 @@ const RoleCard: React.FC<{ title: string, description: string, icon: React.React
 
 const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
     const [isEmployeeLogin, setEmployeeLogin] = useState(false);
-    const { authenticateEmployee } = useQueueSystem();
+    const { authenticateEmployee, loading } = useQueueSystem();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     
-    const handleEmployeeLogin = () => {
+    const handleEmployeeLogin = async () => {
         setError('');
-        const employee = authenticateEmployee(username, password);
+        if (!username || !password) return;
+
+        const employee = await authenticateEmployee(username, password);
         if(employee) {
-            onLogin('employee', employee.id);
+            onLogin('employee', employee);
         } else {
             setError('اسم المستخدم أو كلمة المرور غير صحيحة.');
         }
@@ -64,7 +64,9 @@ const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
                  {error && <p className="text-red-400 text-center mt-4">{error}</p>}
                  <div className="mt-6 flex items-center space-x-4">
                     <Button variant="secondary" onClick={() => setEmployeeLogin(false)} className="w-full">رجوع</Button>
-                    <Button onClick={handleEmployeeLogin} disabled={!username || !password} className="w-full">دخول</Button>
+                    <Button onClick={handleEmployeeLogin} disabled={!username || !password || loading.auth} className="w-full">
+                       {loading.auth ? 'جاري الدخول...' : 'دخول'}
+                    </Button>
                  </div>
              </div>
         )

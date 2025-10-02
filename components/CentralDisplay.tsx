@@ -1,9 +1,12 @@
-
 import React from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 
 const CentralDisplay: React.FC = () => {
-    const { windows, customers } = useQueueSystem();
+    const { state } = useQueueSystem();
+
+    if (!state) return null;
+
+    const { windows, customers } = state;
 
     const activeWindows = windows.filter(w => w.currentCustomerId);
     const servingCustomers = activeWindows.map(w => {

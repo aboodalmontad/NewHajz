@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AdminDashboard from './components/AdminDashboard';
 import CentralDisplay from './components/CentralDisplay';
 import EmployeeView from './components/EmployeeView';
@@ -47,19 +46,30 @@ function App() {
 function MainApp() {
     const [currentView, setCurrentView] = useState<string | null>('login');
     const [loggedInEmployee, setLoggedInEmployee] = useState<Employee | undefined>();
-    const { employees } = useQueueSystem();
+    const { state, fetchState } = useQueueSystem();
 
-    const handleLogin = (view: string, employeeId?: number) => {
+    useEffect(() => {
+        fetchState(); // Fetch initial state
+        const interval = setInterval(fetchState, 3000); // Poll for updates every 3 seconds
+        return () => clearInterval(interval);
+    }, [fetchState]);
+
+    const handleLogin = (view: string, employee?: Employee) => {
         setCurrentView(view);
-        if(employeeId) {
-            const emp = employees.find(e => e.id === employeeId);
-            setLoggedInEmployee(emp);
-        }
+        setLoggedInEmployee(employee);
     };
     
     const handleLogout = () => {
         setCurrentView('login');
         setLoggedInEmployee(undefined);
+    }
+    
+    if (!state) {
+        return (
+            <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+                <div className="text-white text-2xl">جاري تحميل النظام...</div>
+            </div>
+        );
     }
 
     const renderView = () => {
@@ -70,7 +80,9 @@ function MainApp() {
                 return <CentralDisplay />;
             case 'employee':
                 if(loggedInEmployee){
-                    return <EmployeeView employee={loggedInEmployee} />;
+                    // Find the most up-to-date employee object from the global state
+                    const currentEmployeeData = state.employees.find(e => e.id === loggedInEmployee.id);
+                    return currentEmployeeData ? <EmployeeView employee={currentEmployeeData} /> : <LoginSelector onLogin={handleLogin} />;
                 }
                 return <LoginSelector onLogin={handleLogin} />;
             case 'admin':

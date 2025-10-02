@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Employee, EmployeeStatus } from '../types';
 import { Button } from './shared/Button';
@@ -11,16 +10,22 @@ interface EmployeeViewProps {
 
 const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
     const { 
-        windows, 
-        customers, 
+        state,
+        loading,
         assignEmployeeToWindow, 
         unassignEmployeeFromWindow,
         callNextCustomer,
         finishService,
-        queue,
     } = useQueueSystem();
 
     const [selectedWindowId, setSelectedWindowId] = useState<string>(employee.windowId?.toString() || '');
+
+    useEffect(() => {
+        setSelectedWindowId(employee.windowId?.toString() || '');
+    }, [employee.windowId]);
+
+    if (!state) return null;
+    const { windows, customers, queue } = state;
 
     const assignedWindow = windows.find(w => w.id === employee.windowId);
     const currentCustomer = customers.find(c => c.id === assignedWindow?.currentCustomerId);
@@ -73,14 +78,16 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
                      <div className="text-center">
                         <p className="text-slate-400 text-lg">تخدم حالياً</p>
                         <p className="text-7xl font-mono font-bold text-yellow-400 my-4">{currentCustomer?.ticketNumber}</p>
-                        <Button size="lg" variant="danger" onClick={() => finishService(employee.id)}>إنهاء الخدمة</Button>
+                        <Button size="lg" variant="danger" onClick={() => finishService(employee.id)} disabled={loading.finish}>
+                            {loading.finish ? 'جاري الإنهاء...' : 'إنهاء الخدمة'}
+                        </Button>
                     </div>
                 )}
                 {isReadyToServe && (
                     <div className="text-center">
                          <p className="text-slate-400 text-lg mb-4">يوجد {queue.length} عميل في الانتظار.</p>
-                        <Button size="lg" onClick={() => callNextCustomer(employee.id)} disabled={queue.length === 0}>
-                            استدعاء العميل التالي
+                        <Button size="lg" onClick={() => callNextCustomer(employee.id)} disabled={queue.length === 0 || loading.callNext}>
+                           {loading.callNext ? 'جاري الاستدعاء...' : 'استدعاء العميل التالي'}
                         </Button>
                     </div>
                 )}
