@@ -34,14 +34,18 @@ const AdminDashboard: React.FC = () => {
     const [isEmployeeModalOpen, setEmployeeModalOpen] = useState(false);
     const [isWindowModalOpen, setWindowModalOpen] = useState(false);
     const [newEmployeeName, setNewEmployeeName] = useState('');
+    const [newEmployeeUsername, setNewEmployeeUsername] = useState('');
+    const [newEmployeePassword, setNewEmployeePassword] = useState('');
     const [newWindowName, setNewWindowName] = useState('');
     const [newWindowTask, setNewWindowTask] = useState('');
     const [editingWindow, setEditingWindow] = useState<Window | null>(null);
 
     const handleAddEmployee = () => {
-        if (newEmployeeName.trim()) {
-            addEmployee(newEmployeeName.trim());
+        if (newEmployeeName.trim() && newEmployeeUsername.trim() && newEmployeePassword.trim()) {
+            addEmployee(newEmployeeName.trim(), newEmployeeUsername.trim(), newEmployeePassword.trim());
             setNewEmployeeName('');
+            setNewEmployeeUsername('');
+            setNewEmployeePassword('');
             setEmployeeModalOpen(false);
         }
     };
@@ -105,7 +109,7 @@ const AdminDashboard: React.FC = () => {
                         {employees.map(emp => (
                             <li key={emp.id} className="flex justify-between items-center bg-slate-700 p-3 rounded-md">
                                 <div>
-                                    <span className="font-medium">{emp.name}</span>
+                                    <span className="font-medium">{emp.name} <span className="text-slate-400 text-sm">({emp.username})</span></span>
                                     <span className={`mr-3 text-xs font-semibold px-2 py-1 rounded-full ${emp.status === EmployeeStatus.Available ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{emp.status}</span>
                                 </div>
                                 <div className="flex items-center space-x-4">
@@ -140,7 +144,11 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <Modal isOpen={isEmployeeModalOpen} onClose={() => setEmployeeModalOpen(false)} title="إضافة موظف جديد">
-                <input type="text" value={newEmployeeName} onChange={e => setNewEmployeeName(e.target.value)} placeholder="اسم الموظف" className="w-full bg-slate-700 border border-slate-600 rounded-md p-2 text-white focus:ring-sky-500 focus:border-sky-500"/>
+                <div className="space-y-4">
+                    <input type="text" value={newEmployeeName} onChange={e => setNewEmployeeName(e.target.value)} placeholder="اسم الموظف الكامل" className="w-full bg-slate-700 border border-slate-600 rounded-md p-2 text-white focus:ring-sky-500 focus:border-sky-500"/>
+                    <input type="text" value={newEmployeeUsername} onChange={e => setNewEmployeeUsername(e.target.value)} placeholder="اسم المستخدم (للدخول)" className="w-full bg-slate-700 border border-slate-600 rounded-md p-2 text-white focus:ring-sky-500 focus:border-sky-500"/>
+                    <input type="password" value={newEmployeePassword} onChange={e => setNewEmployeePassword(e.target.value)} placeholder="كلمة المرور" className="w-full bg-slate-700 border border-slate-600 rounded-md p-2 text-white focus:ring-sky-500 focus:border-sky-500"/>
+                </div>
                 <div className="mt-4 flex justify-end space-x-2">
                     <Button variant="secondary" onClick={() => setEmployeeModalOpen(false)}>إلغاء</Button>
                     <Button onClick={handleAddEmployee}>إضافة</Button>

@@ -12,13 +12,14 @@ interface QueueContextType {
   finishService: (employeeId: number) => void;
   assignEmployeeToWindow: (employeeId: number, windowId: number) => void;
   unassignEmployeeFromWindow: (employeeId: number) => void;
-  addEmployee: (name: string) => void;
+  addEmployee: (name: string, username: string, password: string) => void;
   removeEmployee: (id: number) => void;
   addWindow: (name: string, customTask?: string) => void;
   removeWindow: (id: number) => void;
   updateWindowTask: (id: number, task: string) => void;
   getAverageWaitTime: () => number;
   getAverageServiceTime: () => number;
+  authenticateEmployee: (username: string, password: string) => Employee | undefined;
 }
 
 const QueueContext = createContext<QueueContextType | undefined>(undefined);
@@ -40,10 +41,10 @@ const initialWindows: Window[] = [
 ];
 
 const initialEmployees: Employee[] = [
-  { id: 1, name: 'أحمد', status: EmployeeStatus.Available, customersServed: 0 },
-  { id: 2, name: 'فاطمة', status: EmployeeStatus.Available, customersServed: 0 },
-  { id: 3, name: 'يوسف', status: EmployeeStatus.Available, customersServed: 0 },
-  { id: 4, name: 'ليلى', status: EmployeeStatus.Available, customersServed: 0 },
+  { id: 1, name: 'أحمد', username: 'ahmad', password: '123', status: EmployeeStatus.Available, customersServed: 0 },
+  { id: 2, name: 'فاطمة', username: 'fatima', password: '123', status: EmployeeStatus.Available, customersServed: 0 },
+  { id: 3, name: 'يوسف', username: 'yousef', password: '123', status: EmployeeStatus.Available, customersServed: 0 },
+  { id: 4, name: 'ليلى', username: 'layla', password: '123', status: EmployeeStatus.Available, customersServed: 0 },
 ];
 
 export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -127,10 +128,12 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setEmployees(prev => prev.map(e => e.id === employeeId ? { ...e, windowId: undefined } : e));
   }, []);
 
-  const addEmployee = useCallback((name: string) => {
+  const addEmployee = useCallback((name: string, username: string, password: string) => {
     const newEmployee: Employee = {
       id: Date.now(),
       name,
+      username,
+      password,
       status: EmployeeStatus.Available,
       customersServed: 0,
     };
@@ -177,6 +180,10 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return totalService / served.length / 1000 / 60; // in minutes
   }, [customers]);
 
+  const authenticateEmployee = useCallback((username: string, password: string): Employee | undefined => {
+    return employees.find(e => e.username.toLowerCase() === username.toLowerCase() && e.password === password);
+  }, [employees]);
+
   const value = {
     customers,
     queue,
@@ -194,6 +201,7 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     updateWindowTask,
     getAverageWaitTime,
     getAverageServiceTime,
+    authenticateEmployee,
   };
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;

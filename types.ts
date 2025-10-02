@@ -24,6 +24,8 @@ export interface Customer {
 export interface Employee {
   id: number;
   name: string;
+  username: string;
+  password: string;
   status: EmployeeStatus;
   windowId?: number;
   customersServed: number;

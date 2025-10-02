@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Button } from './shared/Button';
@@ -18,12 +19,18 @@ const RoleCard: React.FC<{ title: string, description: string, icon: React.React
 
 const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
     const [isEmployeeLogin, setEmployeeLogin] = useState(false);
-    const { employees } = useQueueSystem();
-    const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+    const { authenticateEmployee } = useQueueSystem();
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
     
     const handleEmployeeLogin = () => {
-        if(selectedEmployeeId) {
-            onLogin('employee', parseInt(selectedEmployeeId, 10));
+        setError('');
+        const employee = authenticateEmployee(username, password);
+        if(employee) {
+            onLogin('employee', employee.id);
+        } else {
+            setError('اسم المستخدم أو كلمة المرور غير صحيحة.');
         }
     }
 
@@ -38,19 +45,26 @@ const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
         return (
              <div className="max-w-md mx-auto mt-20 bg-slate-800 p-8 rounded-lg shadow-xl">
                  <h2 className="text-2xl font-bold text-center mb-6">تسجيل دخول الموظف</h2>
-                 <select 
-                    value={selectedEmployeeId} 
-                    onChange={e => setSelectedEmployeeId(e.target.value)}
-                    className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 text-white focus:ring-sky-500 focus:border-sky-500 mb-6"
-                 >
-                     <option value="" disabled>اختر اسمك</option>
-                     {employees.map(emp => (
-                         <option key={emp.id} value={emp.id}>{emp.name}</option>
-                     ))}
-                 </select>
-                 <div className="flex items-center space-x-4">
+                 <div className="space-y-4">
+                     <input 
+                        type="text" 
+                        value={username} 
+                        onChange={e => setUsername(e.target.value)}
+                        placeholder="اسم المستخدم"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 text-white focus:ring-sky-500 focus:border-sky-500"
+                     />
+                      <input 
+                        type="password" 
+                        value={password} 
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="كلمة المرور"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 text-white focus:ring-sky-500 focus:border-sky-500"
+                     />
+                 </div>
+                 {error && <p className="text-red-400 text-center mt-4">{error}</p>}
+                 <div className="mt-6 flex items-center space-x-4">
                     <Button variant="secondary" onClick={() => setEmployeeLogin(false)} className="w-full">رجوع</Button>
-                    <Button onClick={handleEmployeeLogin} disabled={!selectedEmployeeId} className="w-full">دخول</Button>
+                    <Button onClick={handleEmployeeLogin} disabled={!username || !password} className="w-full">دخول</Button>
                  </div>
              </div>
         )
