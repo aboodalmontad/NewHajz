@@ -1,0 +1,5 @@
+{
+  "name": "Smart Queue Management System",
+  "description": "An intelligent queue management system that distributes customers to service windows efficiently. It provides views for customers, employees, and administration, along with a central display screen.",
+  "requestFramePermissions": []
+}
