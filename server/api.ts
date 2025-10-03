@@ -1,3 +1,4 @@
+
 import { QueueSystemState, Employee, Window, Customer, EmployeeStatus, CustomerStatus } from '../types';
 
 // --- DATABASE SIMULATION ---
@@ -20,8 +21,7 @@ let state: QueueSystemState = {
   queue: [],
 };
 
-let ticketCounter = 100;
-const NETWORK_DELAY = 500; // ms
+const NETWORK_DELAY = 300; // ms
 
 // --- API FUNCTIONS ---
 // Each function simulates an async API call with a delay.
@@ -30,6 +30,7 @@ const api = {
   // GET the entire state
   getState: (): Promise<QueueSystemState> => {
     return new Promise(resolve => {
+      // Deep copy to prevent direct state mutation from outside
       setTimeout(() => resolve(JSON.parse(JSON.stringify(state))), NETWORK_DELAY / 2); // Faster read
     });
   },
@@ -48,13 +49,19 @@ const api = {
   addCustomer: (): Promise<Customer> => {
     return new Promise(resolve => {
       setTimeout(() => {
+        let newTicketCounter = 100;
+        if (state.customers.length > 0) {
+            const lastTicketNum = Math.max(0, ...state.customers.map(c => parseInt(c.ticketNumber.split('-')[1], 10) || 0));
+            newTicketCounter = lastTicketNum + 1;
+        }
+        if (newTicketCounter < 100) newTicketCounter = 100;
+
         const newCustomer: Customer = {
           id: Date.now(),
-          ticketNumber: `ر-${ticketCounter}`,
+          ticketNumber: `ر-${newTicketCounter}`,
           requestTime: new Date(),
           status: CustomerStatus.Waiting,
         };
-        ticketCounter++;
         state.customers.push(newCustomer);
         state.queue.push(newCustomer.id);
         resolve({ ...newCustomer });
@@ -121,15 +128,27 @@ const api = {
   assignEmployeeToWindow: (employeeId: number, windowId: number): Promise<void> => {
       return new Promise(resolve => {
           setTimeout(() => {
-              const currentEmployeeOnWindow = state.employees.find(e => e.windowId === windowId);
-              if (currentEmployeeOnWindow) {
-                  currentEmployeeOnWindow.windowId = undefined;
-              }
+              const currentEmployeeIdAtTargetWindow = state.windows.find(w => w.id === windowId)?.employeeId;
+              
+              // Unassign the moving employee from their current window (if any)
+              state.windows = state.windows.map(w => {
+                  if (w.employeeId === employeeId) return { ...w, employeeId: undefined };
+                  return w;
+              });
+              
+              // Assign the moving employee to the new window, displacing anyone there
+              state.windows = state.windows.map(w => {
+                  if (w.id === windowId) return { ...w, employeeId: employeeId };
+                  return w;
+              });
 
-              state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
+              // Update windowId for both employees involved
+              state.employees = state.employees.map(e => {
+                  if (e.id === employeeId) return { ...e, windowId: windowId };
+                  if (e.id === currentEmployeeIdAtTargetWindow) return { ...e, windowId: undefined };
+                  return e;
+              });
 
-              state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: windowId } : e);
-              state.windows = state.windows.map(w => w.id === windowId ? { ...w, employeeId: employeeId } : w);
               resolve();
           }, NETWORK_DELAY);
       });

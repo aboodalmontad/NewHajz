@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Customer } from '../types';
@@ -6,10 +7,19 @@ import { Button } from './shared/Button';
 const KioskView: React.FC = () => {
     const { addCustomer } = useQueueSystem();
     const [lastTicket, setLastTicket] = useState<Customer | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleTakeNumber = () => {
-        const newCustomer = addCustomer();
-        setLastTicket(newCustomer);
+    const handleTakeNumber = async () => {
+        setIsLoading(true);
+        try {
+            const newCustomer = await addCustomer();
+            setLastTicket(newCustomer);
+        } catch (error) {
+            console.error("Failed to get a ticket:", error);
+            // Optionally show an error message to the user
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -18,8 +28,8 @@ const KioskView: React.FC = () => {
                 <>
                     <h1 className="text-5xl font-extrabold text-white mb-4">أهلاً وسهلاً</h1>
                     <p className="text-xl text-slate-300 mb-8">يرجى سحب رقم للدخول إلى الطابور.</p>
-                    <Button size="xl" onClick={handleTakeNumber}>
-                        اسحب رقم
+                    <Button size="xl" onClick={handleTakeNumber} disabled={isLoading}>
+                        {isLoading ? '...جاري الإصدار' : 'اسحب رقم'}
                     </Button>
                 </>
             ) : (
