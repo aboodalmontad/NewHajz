@@ -6,8 +6,15 @@ import KioskView from './components/KioskView';
 import LoginSelector from './components/LoginSelector';
 import { QueueProvider, useQueueSystem } from './context/QueueContext';
 import { Employee } from './types';
+import DbConnector from './components/shared/DbConnector';
 
-const Header: React.FC<{ currentView: string, onNavigate: (view: string | null) => void, loggedInEmployee?: Employee }> = ({ currentView, onNavigate, loggedInEmployee }) => {
+const Header: React.FC<{ 
+    currentView: string, 
+    onNavigate: (view: string | null) => void, 
+    loggedInEmployee?: Employee,
+    dbKey: string | null,
+    onDisconnect: () => void
+}> = ({ currentView, onNavigate, loggedInEmployee, dbKey, onDisconnect }) => {
     return (
         <header className="bg-slate-800 text-white p-4 shadow-md">
             <div className="container mx-auto flex justify-between items-center">
@@ -17,17 +24,23 @@ const Header: React.FC<{ currentView: string, onNavigate: (view: string | null) 
                     </svg>
                     <h1 className="text-2xl font-bold">الطابور الذكي</h1>
                 </div>
-                <div>
-                {currentView !== 'login' && (
-                    <div className="flex items-center space-x-4">
-                       {loggedInEmployee && (
-                           <span className="text-slate-300">أهلاً، {loggedInEmployee.name}</span>
-                       )}
+                <div className="flex items-center space-x-4">
+                     {dbKey && (
+                         <div className="flex items-center space-x-3">
+                             <div className="text-sm text-slate-400 hidden sm:flex items-center space-x-2">
+                                 <span>قاعدة البيانات:</span>
+                                 <span className="font-mono text-sky-400 bg-slate-700 px-2 py-1 rounded">{dbKey}</span>
+                             </div>
+                             <button onClick={onDisconnect} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md transition-colors">
+                                 قطع الاتصال
+                             </button>
+                         </div>
+                    )}
+                    {currentView !== 'login' && loggedInEmployee && (
                        <button onClick={() => onNavigate(null)} className="bg-sky-500 hover:bg-sky-600 px-4 py-2 rounded-md transition-colors">
                            تسجيل الخروج
                        </button>
-                    </div>
-                )}
+                    )}
                 </div>
             </div>
         </header>
@@ -46,9 +59,8 @@ function App() {
 function MainApp() {
     const [currentView, setCurrentView] = useState<string | null>('login');
     const [loggedInEmployee, setLoggedInEmployee] = useState<Employee | undefined>();
-    const { state } = useQueueSystem();
+    const { state, dbKey, setDbKey } = useQueueSystem();
 
-    // Effect to auto-logout employee if they are deleted from the system
     useEffect(() => {
         if (loggedInEmployee && !state.employees.find(e => e.id === loggedInEmployee.id)) {
             handleLogout();
@@ -64,6 +76,13 @@ function MainApp() {
         setCurrentView('login');
         setLoggedInEmployee(undefined);
     }
+
+    const handleDisconnect = () => {
+        if (setDbKey) {
+            setDbKey(null);
+        }
+        handleLogout();
+    };
     
     const renderView = () => {
         switch (currentView) {
@@ -73,7 +92,6 @@ function MainApp() {
                 return <CentralDisplay />;
             case 'employee':
                 if(loggedInEmployee){
-                    // Find the most up-to-date employee object from the global state
                     const currentEmployeeData = state.employees.find(e => e.id === loggedInEmployee.id);
                     return currentEmployeeData ? <EmployeeView employee={currentEmployeeData} /> : <LoginSelector onLogin={handleLogin} />;
                 }
@@ -86,9 +104,26 @@ function MainApp() {
         }
     };
 
+    if (!dbKey || !setDbKey) {
+         return (
+             <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+                <Header currentView="login" onNavigate={()=>{}} dbKey={null} onDisconnect={()=>{}} />
+                <main className="container mx-auto p-4 sm:p-6 lg:p-8">
+                    <DbConnector onConnect={(key) => setDbKey(key)} />
+                </main>
+             </div>
+        )
+    }
+
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-            <Header currentView={currentView || 'login'} onNavigate={handleLogout} loggedInEmployee={loggedInEmployee}/>
+            <Header 
+                currentView={currentView || 'login'} 
+                onNavigate={handleLogout} 
+                loggedInEmployee={loggedInEmployee}
+                dbKey={dbKey}
+                onDisconnect={handleDisconnect}
+            />
             <main className="container mx-auto p-4 sm:p-6 lg:p-8">
                 {renderView()}
             </main>

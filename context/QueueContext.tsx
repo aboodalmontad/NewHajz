@@ -1,25 +1,32 @@
 
 import React, { createContext, useState, useCallback, useContext, ReactNode, useEffect, useRef } from 'react';
-import { Customer, Employee, CustomerStatus, QueueSystemState } from '../types';
+// FIX: Import Window type to be used in the context.
+import { Customer, Employee, CustomerStatus, QueueSystemState, Window } from '../types';
 import api from '../server/api';
 
-const getInitialState = (): QueueSystemState => ({
+const initialSystemState: QueueSystemState = {
     windows: [],
     employees: [],
     customers: [],
     queue: [],
-});
+};
 
 interface QueueContextType {
   state: QueueSystemState;
+  dbKey: string | null;
+  setDbKey: ((key: string | null) => void) | null;
   addCustomer: () => Promise<Customer>;
-  callNextCustomer: (employeeId: number) => Promise<void>;
-  finishService: (employeeId: number) => Promise<void>;
+  // FIX: Updated return type to match API response. The API returns a boolean.
+  callNextCustomer: (employeeId: number) => Promise<boolean>;
+  // FIX: Updated return type to match API response. The API returns a boolean.
+  finishService: (employeeId: number) => Promise<boolean>;
   assignEmployeeToWindow: (employeeId: number, windowId: number) => Promise<void>;
   unassignEmployeeFromWindow: (employeeId: number) => Promise<void>;
-  addEmployee: (name: string, username: string, password: string) => Promise<void>;
+  // FIX: Updated return type to match API response. The API returns the created Employee.
+  addEmployee: (name: string, username: string, password: string) => Promise<Employee>;
   removeEmployee: (id: number) => Promise<void>;
-  addWindow: (name: string, customTask?: string) => Promise<void>;
+  // FIX: Updated return type to match API response. The API returns the created Window.
+  addWindow: (name: string, customTask?: string) => Promise<Window>;
   removeWindow: (id: number) => Promise<void>;
   updateWindowTask: (id: number, task: string) => Promise<void>;
   getAverageWaitTime: () => number;
@@ -38,12 +45,14 @@ export const useQueueSystem = () => {
 };
 
 export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<QueueSystemState>(getInitialState());
+  const [dbKey, setDbKey] = useState<string | null>(null);
+  const [state, setState] = useState<QueueSystemState>(initialSystemState);
   const isPolling = useRef(false);
 
   const refreshState = useCallback(async () => {
+    if (!dbKey) return;
     try {
-      const freshState = await api.getState();
+      const freshState = await api.getState(dbKey);
       // Re-hydrate Date objects from strings
       freshState.customers.forEach((c: Customer) => {
           if (c.requestTime) c.requestTime = new Date(c.requestTime);
@@ -54,11 +63,14 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     } catch (e) {
       console.error("Failed to refresh state from API", e);
     }
-  }, []);
+  }, [dbKey]);
 
-  // Initial fetch and polling for real-time updates
   useEffect(() => {
-    refreshState(); // Initial fetch
+    if (!dbKey) {
+        setState(initialSystemState); // Reset state on disconnect
+        return;
+    }
+    refreshState();
     const intervalId = setInterval(() => {
         if (!isPolling.current) {
             isPolling.current = true;
@@ -66,31 +78,34 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 isPolling.current = false;
             });
         }
-    }, 2000); // Poll every 2 seconds
+    }, 2000);
     return () => clearInterval(intervalId);
-  }, [refreshState]);
+  }, [dbKey, refreshState]);
 
-  // Wrapper for API calls to refresh state after mutation
   const mutateAndRefresh = async <T,>(mutation: () => Promise<T>): Promise<T> => {
     const result = await mutation();
     await refreshState();
     return result;
   }
   
-  const addCustomer = () => mutateAndRefresh(api.addCustomer);
-  const callNextCustomer = (employeeId: number) => mutateAndRefresh(() => api.callNextCustomer(employeeId));
-  const finishService = (employeeId: number) => mutateAndRefresh(() => api.finishService(employeeId));
-  const assignEmployeeToWindow = (employeeId: number, windowId: number) => mutateAndRefresh(() => api.assignEmployeeToWindow(employeeId, windowId));
-  const unassignEmployeeFromWindow = (employeeId: number) => mutateAndRefresh(() => api.unassignEmployeeFromWindow(employeeId));
-  const addEmployee = (name: string, username: string, password: string) => mutateAndRefresh(() => api.addEmployee(name, username, password));
-  const removeEmployee = (id: number) => mutateAndRefresh(() => api.removeEmployee(id));
-  const addWindow = (name: string, customTask?: string) => mutateAndRefresh(() => api.addWindow(name, customTask));
-  const removeWindow = (id: number) => mutateAndRefresh(() => api.removeWindow(id));
-  const updateWindowTask = (id: number, task: string) => mutateAndRefresh(() => api.updateWindowTask(id, task));
+  const ensureDbKey = (): string => {
+      if (!dbKey) throw new Error("No database connected");
+      return dbKey;
+  }
   
-  // No refresh needed for authentication, it's a read-only operation
+  const addCustomer = () => mutateAndRefresh(() => api.addCustomer(ensureDbKey()));
+  const callNextCustomer = (employeeId: number) => mutateAndRefresh(() => api.callNextCustomer(ensureDbKey(), employeeId));
+  const finishService = (employeeId: number) => mutateAndRefresh(() => api.finishService(ensureDbKey(), employeeId));
+  const assignEmployeeToWindow = (employeeId: number, windowId: number) => mutateAndRefresh(() => api.assignEmployeeToWindow(ensureDbKey(), employeeId, windowId));
+  const unassignEmployeeFromWindow = (employeeId: number) => mutateAndRefresh(() => api.unassignEmployeeFromWindow(ensureDbKey(), employeeId));
+  const addEmployee = (name: string, username: string, password: string) => mutateAndRefresh(() => api.addEmployee(ensureDbKey(), name, username, password));
+  const removeEmployee = (id: number) => mutateAndRefresh(() => api.removeEmployee(ensureDbKey(), id));
+  const addWindow = (name: string, customTask?: string) => mutateAndRefresh(() => api.addWindow(ensureDbKey(), name, customTask));
+  const removeWindow = (id: number) => mutateAndRefresh(() => api.removeWindow(ensureDbKey(), id));
+  const updateWindowTask = (id: number, task: string) => mutateAndRefresh(() => api.updateWindowTask(ensureDbKey(), id, task));
+  
   const authenticateEmployee = (username: string, password: string) => {
-    return api.authenticateEmployee(username, password);
+    return api.authenticateEmployee(ensureDbKey(), username, password);
   };
   
   const getAverageWaitTime = useCallback(() => {
@@ -107,8 +122,10 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return totalService / served.length / 1000 / 60; // in minutes
   }, [state.customers]);
 
-  const value = {
+  const value: QueueContextType = {
     state,
+    dbKey,
+    setDbKey,
     addCustomer,
     callNextCustomer,
     finishService,
