@@ -19,6 +19,7 @@ interface QueueContextType {
   updateWindowTask: (id: number, task: string) => Promise<void>;
   authenticateEmployee: (username: string, password: string) => Promise<Employee | undefined>;
   authenticateAdmin: (password: string) => Promise<boolean>;
+  updateAdminPassword: (newPassword: string) => Promise<void>;
 }
 
 const QueueContext = createContext<QueueContextType | undefined>(undefined);
@@ -105,6 +106,8 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const updateAdminPassword = (newPassword: string) => performApiCall(() => api.updateAdminPassword(newPassword));
+
   const value = {
     state,
     isLoading,
@@ -121,6 +124,7 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     updateWindowTask,
     authenticateEmployee,
     authenticateAdmin,
+    updateAdminPassword,
   };
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;

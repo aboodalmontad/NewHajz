@@ -89,6 +89,15 @@ const api = {
     });
   },
 
+  updateAdminPassword: (newPassword: string): Promise<void> => {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        localStorage.setItem(ADMIN_PASSWORD_KEY, newPassword);
+        resolve();
+      }, NETWORK_DELAY);
+    });
+  },
+
   addCustomer: (serviceName?: string): Promise<Customer> => {
     state = loadState();
     return new Promise(resolve => {
