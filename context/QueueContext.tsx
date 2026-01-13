@@ -1,12 +1,13 @@
+
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import api from '../server/api';
 import { Customer, Employee, Window, QueueSystemState } from '../types';
 
 interface QueueContextType {
-  state: QueueSystemState | null; // State can be null initially
+  state: QueueSystemState | null;
   isLoading: boolean;
   fetchState: () => Promise<void>;
-  addCustomer: () => Promise<Customer | undefined>;
+  addCustomer: (serviceName?: string) => Promise<Customer | undefined>;
   callNextCustomer: (employeeId: number) => Promise<void>;
   finishService: (employeeId: number) => Promise<void>;
   assignEmployeeToWindow: (employeeId: number, windowId: number) => Promise<void>;
@@ -17,6 +18,7 @@ interface QueueContextType {
   removeWindow: (id: number) => Promise<void>;
   updateWindowTask: (id: number, task: string) => Promise<void>;
   authenticateEmployee: (username: string, password: string) => Promise<Employee | undefined>;
+  authenticateAdmin: (password: string) => Promise<boolean>;
 }
 
 const QueueContext = createContext<QueueContextType | undefined>(undefined);
@@ -36,13 +38,14 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const fetchState = React.useCallback(async () => {
     try {
       const serverState = await api.getState();
-      // Dates from server will be strings, so we need to parse them
-       serverState.customers.forEach((c: any) => {
-          if (c.requestTime) c.requestTime = new Date(c.requestTime);
-          if (c.callTime) c.callTime = new Date(c.callTime);
-          if (c.finishTime) c.finishTime = new Date(c.finishTime);
-      });
-      setState(serverState);
+      if (serverState && serverState.customers) {
+          serverState.customers.forEach((c: any) => {
+              if (c.requestTime) c.requestTime = new Date(c.requestTime);
+              if (c.callTime) c.callTime = new Date(c.callTime);
+              if (c.finishTime) c.finishTime = new Date(c.finishTime);
+          });
+          setState(serverState);
+      }
     } catch (error) {
       console.error("Failed to fetch state from server:", error);
     } finally {
@@ -55,15 +58,23 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [fetchState]);
 
   const performApiCall = async (apiFunc: () => Promise<any>) => {
-    await apiFunc();
-    await fetchState();
+    try {
+        await apiFunc();
+        await fetchState();
+    } catch (e) {
+        console.error("API Call failed", e);
+    }
   };
 
-  const addCustomer = async () => {
-    // This one returns the new customer, so it's a bit different
-    const newCustomer = await api.addCustomer();
-    await fetchState();
-    return newCustomer;
+  const addCustomer = async (serviceName?: string) => {
+    try {
+        const newCustomer = await api.addCustomer(serviceName);
+        await fetchState();
+        return newCustomer;
+    } catch (e) {
+        console.error("Add customer failed", e);
+        return undefined;
+    }
   };
 
   const callNextCustomer = (employeeId: number) => performApiCall(() => api.callNextCustomer(employeeId));
@@ -77,7 +88,21 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const updateWindowTask = (id: number, task: string) => performApiCall(() => api.updateWindowTask(id, task));
   
   const authenticateEmployee = async (username: string, password: string) => {
-    return api.authenticateEmployee(username, password);
+    try {
+        return await api.authenticateEmployee(username, password);
+    } catch (e) {
+        console.error("Authentication failed", e);
+        return undefined;
+    }
+  };
+
+  const authenticateAdmin = async (password: string) => {
+    try {
+        return await api.authenticateAdmin(password);
+    } catch (e) {
+        console.error("Admin authentication failed", e);
+        return false;
+    }
   };
 
   const value = {
@@ -95,6 +120,7 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     removeWindow,
     updateWindowTask,
     authenticateEmployee,
+    authenticateAdmin,
   };
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;

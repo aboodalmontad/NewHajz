@@ -1,3 +1,4 @@
+
 export enum EmployeeStatus {
   Available = 'متاح',
   Busy = 'مشغول',
@@ -18,6 +19,7 @@ export interface Customer {
   status: CustomerStatus;
   servedBy?: number; // employeeId
   windowId?: number;
+  serviceName?: string; // نوع الخدمة المختارة
 }
 
 export interface Employee {
