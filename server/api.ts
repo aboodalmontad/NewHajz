@@ -1,9 +1,11 @@
+
 import { QueueSystemState, Employee, Window, Customer, EmployeeStatus, CustomerStatus } from '../types';
 
-// --- DATABASE SIMULATION ---
-// This is the single source of truth for the application state.
-// In a real application, this would be a database.
-let state: QueueSystemState = {
+// مفتاح التخزين في LocalStorage
+const STORAGE_KEY = 'smart_queue_system_state_v1';
+
+// الحالة الافتراضية للنظام في حال عدم وجود بيانات سابقة
+const DEFAULT_STATE: QueueSystemState = {
   windows: [
     { id: 1, name: 'شباك 1', customTask: 'استعلامات عامة' },
     { id: 2, name: 'شباك 2', customTask: 'فتح حسابات جديدة' },
@@ -21,21 +23,47 @@ let state: QueueSystemState = {
   ticketCounter: 100,
 };
 
-const NETWORK_DELAY = 500; // ms
+// وظيفة لتحميل الحالة من LocalStorage
+const loadState = (): QueueSystemState => {
+  try {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      const parsed = JSON.parse(savedState);
+      // تحويل سلاسل التاريخ النصية إلى كائنات Date
+      parsed.customers.forEach((c: any) => {
+        if (c.requestTime) c.requestTime = new Date(c.requestTime);
+        if (c.callTime) c.callTime = new Date(c.callTime);
+        if (c.finishTime) c.finishTime = new Date(c.finishTime);
+      });
+      return parsed;
+    }
+  } catch (e) {
+    console.error("Failed to load state from localStorage", e);
+  }
+  return DEFAULT_STATE;
+};
 
-// --- API FUNCTIONS ---
-// Each function simulates an async API call with a delay.
+// وظيفة لحفظ الحالة في LocalStorage
+const saveState = (state: QueueSystemState) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error("Failed to save state to localStorage", e);
+  }
+};
+
+// الحالة الحالية (تم تحميلها من المتصفح)
+let state: QueueSystemState = loadState();
+
+const NETWORK_DELAY = 300; // تقليل التأخير قليلاً لجعل التطبيق أسرع
 
 const api = {
-  // GET the entire state
   getState: (): Promise<QueueSystemState> => {
     return new Promise(resolve => {
-      // Deep copy to prevent mutations from leaking
-      setTimeout(() => resolve(JSON.parse(JSON.stringify(state))), NETWORK_DELAY / 2); // Faster read
+      setTimeout(() => resolve(JSON.parse(JSON.stringify(state))), NETWORK_DELAY / 2);
     });
   },
 
-  // AUTHENTICATE an employee
   authenticateEmployee: (username: string, password: string): Promise<Employee | undefined> => {
     return new Promise(resolve => {
       setTimeout(() => {
@@ -45,7 +73,6 @@ const api = {
     });
   },
 
-  // ADD a new customer
   addCustomer: (): Promise<Customer> => {
     return new Promise(resolve => {
       setTimeout(() => {
@@ -58,14 +85,15 @@ const api = {
         state.ticketCounter++;
         state.customers.push(newCustomer);
         state.queue.push(newCustomer.id);
+        
+        saveState(state); // حفظ التغيير
         resolve({ ...newCustomer });
       }, NETWORK_DELAY);
     });
   },
   
-  // CALL the next customer
   callNextCustomer: (employeeId: number): Promise<boolean> => {
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve) => {
           setTimeout(() => {
               if (state.queue.length === 0) return resolve(false);
 
@@ -85,12 +113,13 @@ const api = {
               state.windows = state.windows.map(w =>
                   w.id === employee.windowId ? { ...w, currentCustomerId: nextCustomerId } : w
               );
+
+              saveState(state); // حفظ التغيير
               resolve(true);
           }, NETWORK_DELAY);
       });
   },
 
-  // FINISH service for a customer
   finishService: (employeeId: number): Promise<boolean> => {
       return new Promise(resolve => {
           setTimeout(() => {
@@ -113,44 +142,44 @@ const api = {
               state.windows = state.windows.map(w => 
                   w.id === employee.windowId ? { ...w, currentCustomerId: undefined } : w
               );
+
+              saveState(state); // حفظ التغيير
               resolve(true);
           }, NETWORK_DELAY);
       });
   },
 
-  // ASSIGN employee to a window
   assignEmployeeToWindow: (employeeId: number, windowId: number): Promise<void> => {
       return new Promise(resolve => {
           setTimeout(() => {
-              // Unassign the employee from any previous window
               state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
               
-              // Unassign the employee who might be at the target window
               const targetWindow = state.windows.find(w => w.id === windowId);
               if (targetWindow && targetWindow.employeeId) {
                   state.employees = state.employees.map(e => e.id === targetWindow.employeeId ? {...e, windowId: undefined} : e);
               }
 
-              // Assign the new employee
               state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: windowId } : e);
               state.windows = state.windows.map(w => w.id === windowId ? { ...w, employeeId: employeeId } : w);
+              
+              saveState(state); // حفظ التغيير
               resolve();
           }, NETWORK_DELAY);
       });
   },
 
-  // UNASSIGN employee from a window
   unassignEmployeeFromWindow: (employeeId: number): Promise<void> => {
       return new Promise(resolve => {
           setTimeout(() => {
               state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
               state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: undefined } : e);
+              
+              saveState(state); // حفظ التغيير
               resolve();
           }, NETWORK_DELAY);
       });
   },
   
-  // ADD a new employee
   addEmployee: (name: string, username: string, password: string): Promise<Employee> => {
     return new Promise(resolve => {
       setTimeout(() => {
@@ -161,27 +190,28 @@ const api = {
           customersServed: 0,
         };
         state.employees.push(newEmployee);
+        
+        saveState(state); // حفظ التغيير
         resolve({ ...newEmployee });
       }, NETWORK_DELAY);
     });
   },
 
-  // REMOVE an employee
   removeEmployee: (id: number): Promise<void> => {
     return new Promise(resolve => {
       setTimeout(() => {
-        // Unassign before removing
         const employee = state.employees.find(e => e.id === id);
         if (employee && employee.windowId) {
             state.windows = state.windows.map(w => w.id === employee.windowId ? {...w, employeeId: undefined} : w);
         }
         state.employees = state.employees.filter(e => e.id !== id);
+        
+        saveState(state); // حفظ التغيير
         resolve();
       }, NETWORK_DELAY);
     });
   },
 
-  // ADD a new window
   addWindow: (name: string, customTask?: string): Promise<Window> => {
     return new Promise(resolve => {
       setTimeout(() => {
@@ -191,12 +221,13 @@ const api = {
           customTask: customTask || undefined,
         };
         state.windows.push(newWindow);
+        
+        saveState(state); // حفظ التغيير
         resolve({ ...newWindow });
       }, NETWORK_DELAY);
     });
   },
 
-  // REMOVE a window
   removeWindow: (id: number): Promise<void> => {
     return new Promise(resolve => {
       setTimeout(() => {
@@ -205,16 +236,19 @@ const api = {
             state.employees = state.employees.map(e => e.id === window.employeeId ? {...e, windowId: undefined} : e);
         }
         state.windows = state.windows.filter(w => w.id !== id);
+        
+        saveState(state); // حفظ التغيير
         resolve();
       }, NETWORK_DELAY);
     });
   },
 
-  // UPDATE a window's task
   updateWindowTask: (id: number, task: string): Promise<void> => {
     return new Promise(resolve => {
       setTimeout(() => {
         state.windows = state.windows.map(w => w.id === id ? {...w, customTask: task} : w);
+        
+        saveState(state); // حفظ التغيير
         resolve();
       }, NETWORK_DELAY);
     });
