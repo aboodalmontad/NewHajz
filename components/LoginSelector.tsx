@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Button } from './shared/Button';
@@ -28,7 +27,6 @@ const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
         setError('');
         if (!username || !password) return;
         setIsLoading(true);
-
         try {
             const employee = await authenticateEmployee(username, password);
             if(employee) {
@@ -36,8 +34,8 @@ const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
             } else {
                 setError('اسم المستخدم أو كلمة المرور غير صحيحة.');
             }
-        } catch (err) {
-            setError('حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.');
+        } catch (e) {
+            setError('حدث خطأ أثناء تسجيل الدخول.');
         } finally {
             setIsLoading(false);
         }
@@ -61,7 +59,6 @@ const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
                         onChange={e => setUsername(e.target.value)}
                         placeholder="اسم المستخدم"
                         className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 text-white focus:ring-sky-500 focus:border-sky-500"
-                        disabled={isLoading}
                      />
                       <input 
                         type="password" 
@@ -70,12 +67,11 @@ const LoginSelector: React.FC<LoginSelectorProps> = ({ onLogin }) => {
                         onKeyDown={(e) => e.key === 'Enter' && handleEmployeeLogin()}
                         placeholder="كلمة المرور"
                         className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 text-white focus:ring-sky-500 focus:border-sky-500"
-                        disabled={isLoading}
                      />
                  </div>
                  {error && <p className="text-red-400 text-center mt-4">{error}</p>}
                  <div className="mt-6 flex items-center space-x-4">
-                    <Button variant="secondary" onClick={() => setEmployeeLogin(false)} className="w-full" disabled={isLoading}>رجوع</Button>
+                    <Button variant="secondary" onClick={() => setEmployeeLogin(false)} className="w-full">رجوع</Button>
                     <Button onClick={handleEmployeeLogin} disabled={!username || !password || isLoading} className="w-full">
                        {isLoading ? '...جاري الدخول' : 'دخول'}
                     </Button>

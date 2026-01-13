@@ -1,5 +1,5 @@
 {
-  "name": "smart-queue-management-system",
+  "name": "copy-of-smart-queue-management-system-نسخة-ناجحة",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "react-dom": "^19.2.0",
-    "react": "^19.2.0",
-    "@google/genai": "^1.22.0"
+    "react": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

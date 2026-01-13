@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Customer } from '../types';
@@ -13,9 +12,11 @@ const KioskView: React.FC = () => {
         setIsLoading(true);
         try {
             const newCustomer = await addCustomer();
-            setLastTicket(newCustomer);
+            if (newCustomer) {
+                setLastTicket(newCustomer);
+            }
         } catch (error) {
-            console.error("Failed to get a ticket:", error);
+            console.error("Failed to get ticket:", error);
             // Optionally show an error message to the user
         } finally {
             setIsLoading(false);

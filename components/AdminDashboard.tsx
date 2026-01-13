@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
-import { EmployeeStatus, Window } from '../types';
+import { EmployeeStatus, Window, CustomerStatus, Customer } from '../types';
 import { Button } from './shared/Button';
 import { Card } from './shared/Card';
 import { Modal } from './shared/Modal';
@@ -18,8 +18,6 @@ const StatCard: React.FC<{ title: string; value: string; icon: React.ReactElemen
 const AdminDashboard: React.FC = () => {
     const { 
         state,
-        getAverageWaitTime, 
-        getAverageServiceTime,
         addEmployee,
         removeEmployee,
         addWindow,
@@ -35,32 +33,68 @@ const AdminDashboard: React.FC = () => {
     const [newWindowName, setNewWindowName] = useState('');
     const [newWindowTask, setNewWindowTask] = useState('');
     const [editingWindow, setEditingWindow] = useState<Window | null>(null);
+    
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [deletingId, setDeletingId] = useState<number | null>(null);
 
-    const handleAddEmployee = () => {
+    const getAverageWaitTime = useCallback(() => {
+        if (!state) return 0;
+        const served = state.customers.filter(c => c.status === CustomerStatus.Served && c.callTime && c.requestTime);
+        if (served.length === 0) return 0;
+        const totalWait = served.reduce((acc, c) => acc + (new Date(c.callTime!).getTime() - new Date(c.requestTime).getTime()), 0);
+        return totalWait / served.length / 1000 / 60; // in minutes
+    }, [state]);
+
+    const getAverageServiceTime = useCallback(() => {
+        if (!state) return 0;
+        const served = state.customers.filter(c => c.status === CustomerStatus.Served && c.finishTime && c.callTime);
+        if (served.length === 0) return 0;
+        const totalService = served.reduce((acc, c) => acc + (new Date(c.finishTime!).getTime() - new Date(c.callTime!).getTime()), 0);
+        return totalService / served.length / 1000 / 60; // in minutes
+    }, [state]);
+
+    const handleAddEmployee = async () => {
         if (newEmployeeName.trim() && newEmployeeUsername.trim() && newEmployeePassword.trim()) {
-            addEmployee(newEmployeeName.trim(), newEmployeeUsername.trim(), newEmployeePassword.trim());
+            setIsSubmitting(true);
+            await addEmployee(newEmployeeName.trim(), newEmployeeUsername.trim(), newEmployeePassword.trim());
             setNewEmployeeName('');
             setNewEmployeeUsername('');
             setNewEmployeePassword('');
             setEmployeeModalOpen(false);
+            setIsSubmitting(false);
         }
     };
     
-    const handleAddWindow = () => {
+    const handleAddWindow = async () => {
         if(newWindowName.trim()) {
-            addWindow(newWindowName.trim(), newWindowTask.trim());
+            setIsSubmitting(true);
+            await addWindow(newWindowName.trim(), newWindowTask.trim());
             setNewWindowName('');
             setNewWindowTask('');
             setWindowModalOpen(false);
+            setIsSubmitting(false);
         }
     };
 
-    const handleUpdateWindow = () => {
+    const handleUpdateWindow = async () => {
         if(editingWindow && newWindowTask.trim()) {
-            updateWindowTask(editingWindow.id, newWindowTask.trim());
-            setEditingWindow(null);
-            setNewWindowTask('');
+            setIsSubmitting(true);
+            await updateWindowTask(editingWindow.id, newWindowTask.trim());
+            closeEditModal();
+            setIsSubmitting(false);
         }
+    }
+
+    const handleRemoveEmployee = async (id: number) => {
+        setDeletingId(id);
+        await removeEmployee(id);
+        setDeletingId(null);
+    }
+    
+    const handleRemoveWindow = async (id: number) => {
+        setDeletingId(id);
+        await removeWindow(id);
+        setDeletingId(null);
     }
 
     const openEditModal = (window: Window) => {
@@ -72,6 +106,8 @@ const AdminDashboard: React.FC = () => {
         setEditingWindow(null);
         setNewWindowTask('');
     };
+
+    if (!state) return null;
     
     const { queue, employees, windows } = state;
     const avgWaitTime = getAverageWaitTime().toFixed(1);
@@ -111,7 +147,9 @@ const AdminDashboard: React.FC = () => {
                                 </div>
                                 <div className="flex items-center space-x-4">
                                     <span className="text-sm text-slate-400">خدم: {emp.customersServed}</span>
-                                    <Button size="sm" variant="danger" onClick={() => removeEmployee(emp.id)}>&times;</Button>
+                                    <Button size="sm" variant="danger" onClick={() => handleRemoveEmployee(emp.id)} disabled={deletingId === emp.id}>
+                                        {deletingId === emp.id ? '...' : <>&times;</>}
+                                    </Button>
                                 </div>
                             </li>
                         ))}
@@ -132,7 +170,9 @@ const AdminDashboard: React.FC = () => {
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <Button size="sm" variant="secondary" onClick={() => openEditModal(win)}>تعديل</Button>
-                                    <Button size="sm" variant="danger" onClick={() => removeWindow(win.id)}>&times;</Button>
+                                    <Button size="sm" variant="danger" onClick={() => handleRemoveWindow(win.id)} disabled={deletingId === win.id}>
+                                        {deletingId === win.id ? '...' : <>&times;</>}
+                                    </Button>
                                 </div>
                             </li>
                         ))}
@@ -148,7 +188,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <div className="mt-4 flex justify-end space-x-2">
                     <Button variant="secondary" onClick={() => setEmployeeModalOpen(false)}>إلغاء</Button>
-                    <Button onClick={handleAddEmployee}>إضافة</Button>
+                    <Button onClick={handleAddEmployee} disabled={isSubmitting}>{isSubmitting ? '...جاري الإضافة' : 'إضافة'}</Button>
                 </div>
             </Modal>
             
@@ -159,7 +199,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <div className="mt-4 flex justify-end space-x-2">
                     <Button variant="secondary" onClick={() => setWindowModalOpen(false)}>إلغاء</Button>
-                    <Button onClick={handleAddWindow}>إضافة</Button>
+                    <Button onClick={handleAddWindow} disabled={isSubmitting}>{isSubmitting ? '...جاري الإضافة' : 'إضافة'}</Button>
                 </div>
             </Modal>
 
@@ -167,7 +207,7 @@ const AdminDashboard: React.FC = () => {
                  <input type="text" value={newWindowTask} onChange={e => setNewWindowTask(e.target.value)} placeholder="مهمة مخصصة" className="w-full bg-slate-700 border border-slate-600 rounded-md p-2 text-white focus:ring-sky-500 focus:border-sky-500"/>
                 <div className="mt-4 flex justify-end space-x-2">
                     <Button variant="secondary" onClick={closeEditModal}>إلغاء</Button>
-                    <Button onClick={handleUpdateWindow}>حفظ التغييرات</Button>
+                    <Button onClick={handleUpdateWindow} disabled={isSubmitting}>{isSubmitting ? '...جاري الحفظ' : 'حفظ التغييرات'}</Button>
                 </div>
             </Modal>
 

@@ -43,4 +43,5 @@ export interface QueueSystemState {
   queue: number[];
   employees: Employee[];
   windows: Window[];
+  ticketCounter: number;
 }

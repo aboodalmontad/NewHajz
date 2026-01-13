@@ -6,15 +6,8 @@ import KioskView from './components/KioskView';
 import LoginSelector from './components/LoginSelector';
 import { QueueProvider, useQueueSystem } from './context/QueueContext';
 import { Employee } from './types';
-import DbConnector from './components/shared/DbConnector';
 
-const Header: React.FC<{ 
-    currentView: string, 
-    onNavigate: (view: string | null) => void, 
-    loggedInEmployee?: Employee,
-    dbKey: string | null,
-    onDisconnect: () => void
-}> = ({ currentView, onNavigate, loggedInEmployee, dbKey, onDisconnect }) => {
+const Header: React.FC<{ currentView: string, onNavigate: (view: string | null) => void, loggedInEmployee?: Employee }> = ({ currentView, onNavigate, loggedInEmployee }) => {
     return (
         <header className="bg-slate-800 text-white p-4 shadow-md">
             <div className="container mx-auto flex justify-between items-center">
@@ -24,23 +17,17 @@ const Header: React.FC<{
                     </svg>
                     <h1 className="text-2xl font-bold">الطابور الذكي</h1>
                 </div>
-                <div className="flex items-center space-x-4">
-                     {dbKey && (
-                         <div className="flex items-center space-x-3">
-                             <div className="text-sm text-slate-400 hidden sm:flex items-center space-x-2">
-                                 <span>قاعدة البيانات:</span>
-                                 <span className="font-mono text-sky-400 bg-slate-700 px-2 py-1 rounded">{dbKey}</span>
-                             </div>
-                             <button onClick={onDisconnect} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md transition-colors">
-                                 قطع الاتصال
-                             </button>
-                         </div>
-                    )}
-                    {currentView !== 'login' && loggedInEmployee && (
+                <div>
+                {currentView !== 'login' && (
+                    <div className="flex items-center space-x-4">
+                       {loggedInEmployee && (
+                           <span className="text-slate-300">أهلاً، {loggedInEmployee.name}</span>
+                       )}
                        <button onClick={() => onNavigate(null)} className="bg-sky-500 hover:bg-sky-600 px-4 py-2 rounded-md transition-colors">
                            تسجيل الخروج
                        </button>
-                    )}
+                    </div>
+                )}
                 </div>
             </div>
         </header>
@@ -59,13 +46,27 @@ function App() {
 function MainApp() {
     const [currentView, setCurrentView] = useState<string | null>('login');
     const [loggedInEmployee, setLoggedInEmployee] = useState<Employee | undefined>();
-    const { state, dbKey, setDbKey } = useQueueSystem();
+    const { state, isLoading, fetchState } = useQueueSystem();
 
+    // Polling effect for real-time updates
     useEffect(() => {
-        if (loggedInEmployee && !state.employees.find(e => e.id === loggedInEmployee.id)) {
+        const intervalId = setInterval(() => {
+            // Only poll if the user is not interacting with a modal/form to avoid state jumps
+            if (!document.querySelector('[role="dialog"]')) {
+                fetchState();
+            }
+        }, 3000); // Poll every 3 seconds
+
+        return () => clearInterval(intervalId);
+    }, [fetchState]);
+
+
+    // Effect to auto-logout employee if they are deleted from the system
+    useEffect(() => {
+        if (loggedInEmployee && state && !state.employees.find(e => e.id === loggedInEmployee.id)) {
             handleLogout();
         }
-    }, [state.employees, loggedInEmployee]);
+    }, [state, loggedInEmployee]);
 
     const handleLogin = (view: string, employee?: Employee) => {
         setCurrentView(view);
@@ -76,13 +77,6 @@ function MainApp() {
         setCurrentView('login');
         setLoggedInEmployee(undefined);
     }
-
-    const handleDisconnect = () => {
-        if (setDbKey) {
-            setDbKey(null);
-        }
-        handleLogout();
-    };
     
     const renderView = () => {
         switch (currentView) {
@@ -91,7 +85,7 @@ function MainApp() {
             case 'display':
                 return <CentralDisplay />;
             case 'employee':
-                if(loggedInEmployee){
+                if(loggedInEmployee && state){
                     const currentEmployeeData = state.employees.find(e => e.id === loggedInEmployee.id);
                     return currentEmployeeData ? <EmployeeView employee={currentEmployeeData} /> : <LoginSelector onLogin={handleLogin} />;
                 }
@@ -104,26 +98,31 @@ function MainApp() {
         }
     };
 
-    if (!dbKey || !setDbKey) {
+    if (isLoading) {
+        return (
+             <div className="min-h-screen bg-slate-900 text-slate-100 flex justify-center items-center">
+                <div className="text-center">
+                    <svg className="animate-spin h-10 w-10 text-sky-400 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p className="mt-4 text-lg">...جاري تحميل النظام</p>
+                </div>
+            </div>
+        );
+    }
+    
+    if (!state) {
          return (
-             <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-                <Header currentView="login" onNavigate={()=>{}} dbKey={null} onDisconnect={()=>{}} />
-                <main className="container mx-auto p-4 sm:p-6 lg:p-8">
-                    <DbConnector onConnect={(key) => setDbKey(key)} />
-                </main>
+             <div className="min-h-screen bg-slate-900 text-slate-100 flex justify-center items-center">
+                 <p className="text-xl text-red-400">فشل تحميل بيانات النظام. يرجى المحاولة مرة أخرى.</p>
              </div>
-        )
+         )
     }
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-            <Header 
-                currentView={currentView || 'login'} 
-                onNavigate={handleLogout} 
-                loggedInEmployee={loggedInEmployee}
-                dbKey={dbKey}
-                onDisconnect={handleDisconnect}
-            />
+            <Header currentView={currentView || 'login'} onNavigate={handleLogout} loggedInEmployee={loggedInEmployee}/>
             <main className="container mx-auto p-4 sm:p-6 lg:p-8">
                 {renderView()}
             </main>

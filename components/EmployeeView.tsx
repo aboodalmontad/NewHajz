@@ -18,23 +18,37 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
     } = useQueueSystem();
 
     const [selectedWindowId, setSelectedWindowId] = useState<string>(employee.windowId?.toString() || '');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         setSelectedWindowId(employee.windowId?.toString() || '');
     }, [employee.windowId]);
+
+    if (!state) return null;
 
     const { windows, customers, queue } = state;
 
     const assignedWindow = windows.find(w => w.id === employee.windowId);
     const currentCustomer = customers.find(c => c.id === assignedWindow?.currentCustomerId);
 
+    const handleAction = async (action: () => Promise<any>) => {
+        setIsSubmitting(true);
+        try {
+            await action();
+        } catch (error) {
+            console.error("Action failed", error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleWindowSelection = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const winId = e.target.value;
         setSelectedWindowId(winId);
         if (winId) {
-            assignEmployeeToWindow(employee.id, parseInt(winId, 10));
+            handleAction(() => assignEmployeeToWindow(employee.id, parseInt(winId, 10)));
         } else {
-            unassignEmployeeFromWindow(employee.id);
+            handleAction(() => unassignEmployeeFromWindow(employee.id));
         }
     };
 
@@ -58,7 +72,8 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
                     <select 
                         value={selectedWindowId} 
                         onChange={handleWindowSelection} 
-                        className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 text-white focus:ring-sky-500 focus:border-sky-500"
+                        disabled={isSubmitting}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 text-white focus:ring-sky-500 focus:border-sky-500 disabled:opacity-50"
                     >
                         <option value="">اختر شباكاً</option>
                         {availableWindows.map(win => (
@@ -76,16 +91,16 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
                      <div className="text-center">
                         <p className="text-slate-400 text-lg">تخدم حالياً</p>
                         <p className="text-7xl font-mono font-bold text-yellow-400 my-4">{currentCustomer?.ticketNumber}</p>
-                        <Button size="lg" variant="danger" onClick={() => finishService(employee.id)}>
-                            إنهاء الخدمة
+                        <Button size="lg" variant="danger" onClick={() => handleAction(() => finishService(employee.id))} disabled={isSubmitting}>
+                            {isSubmitting ? '...' : 'إنهاء الخدمة'}
                         </Button>
                     </div>
                 )}
                 {isReadyToServe && (
                     <div className="text-center">
                          <p className="text-slate-400 text-lg mb-4">يوجد {queue.length} عميل في الانتظار.</p>
-                        <Button size="lg" onClick={() => callNextCustomer(employee.id)} disabled={queue.length === 0}>
-                           استدعاء العميل التالي
+                        <Button size="lg" onClick={() => handleAction(() => callNextCustomer(employee.id))} disabled={queue.length === 0 || isSubmitting}>
+                           {isSubmitting ? '...' : 'استدعاء العميل التالي'}
                         </Button>
                     </div>
                 )}
