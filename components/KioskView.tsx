@@ -69,35 +69,61 @@ const KioskView: React.FC = () => {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
+            {/* إعدادات الطباعة المحسنة */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page { margin: 0; size: ${printerConfig.paperWidth} auto; }
-                    html, body { background: white !important; margin: 0; padding: 0; height: auto; width: ${printerConfig.paperWidth === 'A4' ? '100%' : printerConfig.paperWidth}; }
-                    #root, header, main > *:not(#ticket-print-area) { display: none !important; }
+                    html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+                    
+                    /* إخفاء واجهة التطبيق تماماً */
+                    #root, header, main, .no-print { display: none !important; visibility: hidden !important; }
+                    
+                    /* إظهار منطقة الطباعة فقط */
                     #ticket-print-area {
-                        display: block !important; visibility: visible !important;
-                        width: 100% !important; padding: 10mm 5mm; color: black !important; text-align: center;
+                        display: block !important;
+                        visibility: visible !important;
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        margin: 0 !important;
+                        padding: 10mm 5mm !important;
+                        background: white !important;
+                        color: black !important;
+                        text-align: center !important;
                     }
-                    .p-head { font-size: ${printerConfig.headerFontSize}px; font-weight: bold; margin-bottom: 5px; }
+                    
+                    #ticket-print-area * { visibility: visible !important; }
+
+                    .p-head { font-size: ${printerConfig.headerFontSize}px !important; font-weight: bold; margin-bottom: 5px; }
                     .p-num { 
-                        font-size: ${printerConfig.numberFontSize}px; font-weight: 900; 
-                        margin: 10px 0; border-top: 2px solid black; border-bottom: 2px solid black; 
-                        padding: 5px 0; font-family: monospace;
+                        font-size: ${printerConfig.numberFontSize}px !important; 
+                        font-weight: 900; 
+                        margin: 10px 0; 
+                        border-top: 2px solid black; 
+                        border-bottom: 2px solid black; 
+                        padding: 10px 0;
+                        line-height: 1;
+                        font-family: monospace;
                     }
-                    .p-foot { font-size: ${printerConfig.detailsFontSize}px; margin-top: 10px; }
+                    .p-foot { font-size: ${printerConfig.detailsFontSize}px !important; margin-top: 10px; line-height: 1.4; }
                 }
-                #ticket-print-area { position: fixed; left: -9999px; top: -9999px; }
+
+                /* إخفاء عن الشاشة العادية */
+                #ticket-print-area {
+                    display: none;
+                }
             ` }} />
 
             <div id="ticket-print-area">
                 {lastTicket && (
                     <>
                         <div className="p-head">نظام الطابور الذكي</div>
-                        <div className="p-foot" style={{fontWeight: 'bold'}}>{lastTicket.serviceName}</div>
+                        <div className="p-foot" style={{fontWeight: 'bold', fontSize: '1.2em'}}>{lastTicket.serviceName}</div>
                         <div className="p-num">{lastTicket.ticketNumber}</div>
                         <div className="p-foot">{printerConfig.footerText}</div>
                         {printerConfig.showDate && (
-                            <div className="p-foot" style={{borderTop: '1px dashed black', marginTop: '15px', paddingTop: '10px'}}>
+                            <div className="p-foot" style={{borderTop: '1px dashed black', marginTop: '15px', paddingTop: '10px', fontSize: '0.9em'}}>
                                 {new Date(lastTicket.requestTime).toLocaleTimeString('ar-EG')} - {new Date(lastTicket.requestTime).toLocaleDateString('ar-EG')}
                             </div>
                         )}

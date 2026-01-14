@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Button } from './shared/Button';
 import { Card } from './shared/Card';
@@ -23,13 +23,76 @@ const PrinterSettings: React.FC = () => {
     };
 
     const handleTestPrint = () => {
-        window.print();
+        // نستخدم مهلة بسيطة لضمان تحديث الـ DOM قبل استدعاء نافذة الطباعة
+        setTimeout(() => {
+            window.print();
+        }, 100);
     };
 
     if (!state) return null;
 
     return (
         <div className="max-w-6xl mx-auto py-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {/* CSS الطباعة المحسن - يضمن عدم ظهور ورقة فارغة */}
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { margin: 0; size: ${config.paperWidth} auto; }
+                    
+                    /* إخفاء واجهة التطبيق بالكامل */
+                    html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+                    #root, header, main, nav, .no-print { display: none !important; visibility: hidden !important; }
+                    
+                    /* إظهار منطقة التذكرة فقط وبقوة */
+                    #ticket-print-area {
+                        display: block !important;
+                        visibility: visible !important;
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        margin: 0 !important;
+                        padding: 10mm 5mm !important;
+                        background: white !important;
+                        color: black !important;
+                        text-align: center !important;
+                    }
+                    
+                    #ticket-print-area * { visibility: visible !important; }
+
+                    .p-head { font-size: ${config.headerFontSize}px !important; font-weight: bold; margin-bottom: 5px; }
+                    .p-num { 
+                        font-size: ${config.numberFontSize}px !important; 
+                        font-weight: 900; 
+                        margin: 15px 0; 
+                        border-top: 2px solid black; 
+                        border-bottom: 2px solid black; 
+                        padding: 10px 0;
+                        line-height: 1;
+                    }
+                    .p-serv { font-size: ${config.detailsFontSize + 4}px !important; font-weight: bold; }
+                    .p-foot { font-size: ${config.detailsFontSize}px !important; margin-top: 10px; line-height: 1.4; }
+                    .p-date { font-size: ${config.detailsFontSize - 2}px !important; margin-top: 15px; border-top: 1px dashed black; padding-top: 10px; }
+                }
+
+                /* إخفاء منطقة الطباعة عن الشاشة العادية */
+                #ticket-print-area {
+                    display: none;
+                }
+            ` }} />
+
+            {/* عنصر التذكرة الذي سيظهر عند الطباعة فقط */}
+            <div id="ticket-print-area">
+                <div className="p-head">نظام الطابور الذكي</div>
+                <div className="p-serv">تذكرة تجريبية</div>
+                <div className="p-num">ر-000</div>
+                <div className="p-foot">{config.footerText}</div>
+                {config.showDate && (
+                    <div className="p-date">
+                        {new Date().toLocaleTimeString('ar-EG')} - {new Date().toLocaleDateString('ar-EG')}
+                    </div>
+                )}
+            </div>
+
             <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
                 <div>
                     <h2 className="text-4xl font-black text-white tracking-tight">استوديو الطباعة</h2>
@@ -42,7 +105,6 @@ const PrinterSettings: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                {/* لوحة التحكم */}
                 <div className="space-y-8">
                     <Card className="bg-slate-800 p-8 border border-slate-700 space-y-6">
                         <h3 className="text-xl font-bold text-sky-400 flex items-center gap-2">
@@ -124,7 +186,6 @@ const PrinterSettings: React.FC = () => {
                     </Card>
                 </div>
 
-                {/* معاينة التذكرة */}
                 <div className="sticky top-10">
                     <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4 text-center">المعاينة الحية (Live Preview)</h3>
                     <div className="flex justify-center">
@@ -138,12 +199,12 @@ const PrinterSettings: React.FC = () => {
                             </div>
                             
                             <div className="py-6 border-b-2 border-black border-dashed">
-                                <p style={{ fontSize: `${config.detailsFontSize + 2}px` }} className="font-bold">خدمات فتح الحساب</p>
+                                <p style={{ fontSize: `${config.detailsFontSize + 2}px` }} className="font-bold">تذكرة تجريبية</p>
                                 <div 
                                     style={{ fontSize: `${config.numberFontSize}px` }} 
                                     className="font-black my-4 leading-none"
                                 >
-                                    ر-101
+                                    ر-000
                                 </div>
                                 <p style={{ fontSize: `${config.detailsFontSize}px` }}>يرجى الانتظار في صالة الاستقبال</p>
                             </div>
@@ -168,22 +229,6 @@ const PrinterSettings: React.FC = () => {
                     </div>
                 </div>
             </div>
-            
-            {/* CSS إضافي للمتصفح عند الطلب */}
-            <style dangerouslySetInnerHTML={{ __html: `
-                @media print {
-                    @page { margin: 0; size: ${config.paperWidth} auto; }
-                    body * { visibility: hidden; }
-                    #ticket-print-area, #ticket-print-area * { visibility: visible; }
-                    #ticket-print-area {
-                        position: absolute; left: 0; top: 0; width: 100%;
-                        display: block !important; padding: 10mm 5mm; text-align: center;
-                    }
-                    .p-head { font-size: ${config.headerFontSize}px !important; font-weight: bold; }
-                    .p-num { font-size: ${config.numberFontSize}px !important; font-weight: 900; border-top: 2px solid #000; border-bottom: 2px solid #000; margin: 10px 0; padding: 10px 0; }
-                    .p-foot { font-size: ${config.detailsFontSize}px !important; }
-                }
-            ` }} />
         </div>
     );
 };
