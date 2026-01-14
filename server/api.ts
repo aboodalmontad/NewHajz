@@ -54,8 +54,9 @@ const loadLocalState = (): QueueSystemState => {
         if (c.callTime) c.callTime = new Date(c.callTime);
         if (c.finishTime) c.finishTime = new Date(c.finishTime);
       });
+      // التأكد من استمرار وجود الإعدادات الأساسية
       if (!parsed.printerConfig) parsed.printerConfig = DEFAULT_PRINTER_CONFIG;
-      else if (!parsed.printerConfig.headerText) parsed.printerConfig.headerText = DEFAULT_PRINTER_CONFIG.headerText;
+      if (!parsed.printerConfig.headerText) parsed.printerConfig.headerText = DEFAULT_PRINTER_CONFIG.headerText;
       return parsed;
     }
   } catch (e) {
@@ -79,7 +80,7 @@ const pushToCloud = async (state: QueueSystemState) => {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(state)
-    }).catch(e => console.error("Cloud fetch failed:", e));
+    }).catch(e => console.error("Cloud push failed:", e));
   } catch (e) {
     console.error("Cloud push fatal error:", e);
   }
@@ -93,17 +94,19 @@ const api = {
         const response = await fetch(`${SYNC_ENDPOINT}/${local.syncId}`);
         if (response.ok) {
           const remote = await response.json();
+          // تحويل التواريخ من نصوص إلى كائنات Date
           remote.customers?.forEach((c: any) => {
             if (c.requestTime) c.requestTime = new Date(c.requestTime);
             if (c.callTime) c.callTime = new Date(c.callTime);
             if (c.finishTime) c.finishTime = new Date(c.finishTime);
           });
-          if (!remote.printerConfig) remote.printerConfig = DEFAULT_PRINTER_CONFIG;
+          // نحافظ على كود المزامنة المحلي في حال لم يرسله السيرفر
+          if (!remote.syncId) remote.syncId = local.syncId;
           saveLocalState(remote);
           return remote;
         }
       } catch (e) {
-        console.warn("Cloud sync failed, using local data");
+        console.warn("Cloud sync failed, using local persistent data");
       }
     }
     return local;
@@ -143,6 +146,12 @@ const api = {
       console.error("Join sync error:", e);
     }
     return false;
+  },
+
+  disconnectSync: async (): Promise<void> => {
+    const state = loadLocalState();
+    delete state.syncId;
+    saveLocalState(state);
   },
 
   authenticateEmployee: async (username: string, password: string): Promise<Employee | undefined> => {

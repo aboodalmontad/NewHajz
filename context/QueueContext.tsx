@@ -27,6 +27,7 @@ interface QueueContextType {
   // Cloud Sync Methods
   enableCloudSync: () => Promise<string>;
   joinCloudSync: (syncId: string) => Promise<boolean>;
+  disconnectSync: () => Promise<void>;
   
   // Local Mesh Methods
   startMeshHost: () => Promise<string>;
@@ -88,6 +89,11 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return success;
   };
 
+  const disconnectSync = async () => {
+    await api.disconnectSync();
+    await fetchState();
+  };
+
   const startMeshHost = async () => {
     if (peerRef.current) peerRef.current.close();
     peerRef.current = new PeerManager(handleMeshMessage, setMeshStatus);
@@ -133,7 +139,7 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     authenticateAdmin: api.authenticateAdmin,
     updateAdminPassword: api.updateAdminPassword,
     updatePrinterConfig: (c: PrinterConfig) => performApiCall(() => api.updatePrinterConfig(c)),
-    enableCloudSync, joinCloudSync,
+    enableCloudSync, joinCloudSync, disconnectSync,
     startMeshHost, completeMeshHost, joinMeshClient
   };
 
