@@ -10,6 +10,7 @@ const PrinterSettings: React.FC = () => {
     const { state, updatePrinterConfig } = useQueueSystem();
     const [config, setConfig] = useState<PrinterConfig>(state?.printerConfig || {
         paperWidth: '80mm',
+        headerText: 'نظام الطابور الذكي',
         headerFontSize: 20,
         numberFontSize: 70,
         detailsFontSize: 14,
@@ -33,7 +34,7 @@ const PrinterSettings: React.FC = () => {
     const PrintPreviewPortal = () => {
         return ReactDOM.createPortal(
             <div id="ticket-print-area">
-                <div className="p-head">نظام الطابور الذكي</div>
+                <div className="p-head">{config.headerText}</div>
                 <div className="p-serv">تذكرة تجريبية</div>
                 <div className="p-num">A-000</div>
                 <div className="p-foot">{config.footerText}</div>
@@ -104,11 +105,23 @@ const PrinterSettings: React.FC = () => {
             <div className="flex flex-col gap-6">
                 <div className="text-right">
                     <h2 className="text-2xl font-black text-white tracking-tight">إعدادات التذكرة</h2>
-                    <p className="text-slate-400 text-sm italic">اضبط الحجم والنصوص كما تريد</p>
+                    <p className="text-slate-400 text-sm italic">اضبط العنوان، الحجم والنصوص كما تريد</p>
                 </div>
 
                 <div className="space-y-6">
                     <Card className="bg-slate-800 p-6 border border-slate-700 space-y-4 text-right">
+                        <div>
+                            <label className="text-xs text-slate-400 block mb-1">عنوان التذكرة العلوي</label>
+                            <input 
+                                type="text"
+                                value={config.headerText}
+                                onChange={e => setConfig({...config, headerText: e.target.value})}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white text-sm outline-none text-right focus:border-sky-500"
+                                dir="rtl"
+                                placeholder="مثال: عيادة الأمل الطبية"
+                            />
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="text-xs text-slate-400 block mb-1">عرض الورق</label>
@@ -139,34 +152,35 @@ const PrinterSettings: React.FC = () => {
                             <div>
                                 <div className="flex justify-between mb-1">
                                     <span className="text-sky-500 font-mono text-[10px]">{config.headerFontSize}px</span>
-                                    <label className="text-[10px] text-slate-400">خط العنوان</label>
+                                    <label className="text-[10px] text-slate-400">حجم خط العنوان</label>
                                 </div>
                                 <input type="range" min="12" max="40" value={config.headerFontSize} onChange={e => setConfig({...config, headerFontSize: parseInt(e.target.value)})} className="w-full accent-sky-500"/>
                             </div>
                             <div>
                                 <div className="flex justify-between mb-1">
                                     <span className="text-sky-500 font-mono text-[10px]">{config.numberFontSize}px</span>
-                                    <label className="text-[10px] text-slate-400">خط الرقم</label>
+                                    <label className="text-[10px] text-slate-400">حجم خط الرقم</label>
                                 </div>
                                 <input type="range" min="40" max="120" value={config.numberFontSize} onChange={e => setConfig({...config, numberFontSize: parseInt(e.target.value)})} className="w-full accent-sky-500"/>
                             </div>
                         </div>
 
                         <div>
-                            <label className="text-xs text-slate-400 block mb-1">نص التذييل</label>
+                            <label className="text-xs text-slate-400 block mb-1">نص التذييل (Footer)</label>
                             <textarea 
                                 value={config.footerText}
                                 onChange={e => setConfig({...config, footerText: e.target.value})}
                                 className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm outline-none text-right"
                                 rows={2}
                                 dir="rtl"
+                                placeholder="رسالة شكر أو معلومات إضافية"
                             />
                         </div>
                     </Card>
 
                     <div className="flex gap-2">
                         <Button variant="secondary" className="flex-1" onClick={handleTestPrint}>تجربة</Button>
-                        <Button className="flex-1" onClick={handleSave}>حفظ</Button>
+                        <Button className="flex-1" onClick={handleSave}>حفظ الإعدادات</Button>
                     </div>
                 </div>
             </div>

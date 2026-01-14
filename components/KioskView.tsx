@@ -71,7 +71,7 @@ const KioskView: React.FC = () => {
         if (!lastTicket) return null;
         return ReactDOM.createPortal(
             <div id="ticket-print-area">
-                <div className="p-head">نظام الطابور الذكي</div>
+                <div className="p-head">{printerConfig.headerText}</div>
                 <div className="p-serv">{lastTicket.serviceName}</div>
                 <div className="p-num">{lastTicket.ticketNumber}</div>
                 <div className="p-foot">{printerConfig.footerText}</div>

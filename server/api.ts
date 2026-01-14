@@ -7,6 +7,7 @@ const SYNC_ENDPOINT = 'https://jsonblob.com/api/jsonBlob';
 
 const DEFAULT_PRINTER_CONFIG: PrinterConfig = {
   paperWidth: '80mm',
+  headerText: 'نظام الطابور الذكي',
   headerFontSize: 20,
   numberFontSize: 70,
   detailsFontSize: 14,
@@ -54,6 +55,7 @@ const loadLocalState = (): QueueSystemState => {
         if (c.finishTime) c.finishTime = new Date(c.finishTime);
       });
       if (!parsed.printerConfig) parsed.printerConfig = DEFAULT_PRINTER_CONFIG;
+      else if (!parsed.printerConfig.headerText) parsed.printerConfig.headerText = DEFAULT_PRINTER_CONFIG.headerText;
       return parsed;
     }
   } catch (e) {

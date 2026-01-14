@@ -12,6 +12,7 @@ export enum CustomerStatus {
 
 export interface PrinterConfig {
   paperWidth: '58mm' | '80mm' | 'A4';
+  headerText: string;
   headerFontSize: number;
   numberFontSize: number;
   detailsFontSize: number;
