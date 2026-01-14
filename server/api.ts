@@ -54,7 +54,6 @@ const loadLocalState = (): QueueSystemState => {
         if (c.callTime) c.callTime = new Date(c.callTime);
         if (c.finishTime) c.finishTime = new Date(c.finishTime);
       });
-      // التأكد من استمرار وجود الإعدادات الأساسية
       if (!parsed.printerConfig) parsed.printerConfig = DEFAULT_PRINTER_CONFIG;
       if (!parsed.printerConfig.headerText) parsed.printerConfig.headerText = DEFAULT_PRINTER_CONFIG.headerText;
       return parsed;
@@ -94,13 +93,11 @@ const api = {
         const response = await fetch(`${SYNC_ENDPOINT}/${local.syncId}`);
         if (response.ok) {
           const remote = await response.json();
-          // تحويل التواريخ من نصوص إلى كائنات Date
           remote.customers?.forEach((c: any) => {
             if (c.requestTime) c.requestTime = new Date(c.requestTime);
             if (c.callTime) c.callTime = new Date(c.callTime);
             if (c.finishTime) c.finishTime = new Date(c.finishTime);
           });
-          // نحافظ على كود المزامنة المحلي في حال لم يرسله السيرفر
           if (!remote.syncId) remote.syncId = local.syncId;
           saveLocalState(remote);
           return remote;
@@ -195,19 +192,19 @@ const api = {
     pushToCloud(state);
   },
   
-  callNextCustomer: async (employeeId: number): Promise<boolean> => {
+  callNextCustomer: async (employeeId: number): Promise<QueueSystemState | null> => {
       const state = await api.getState();
       const employee = state.employees.find(e => e.id === employeeId);
-      if (!employee || employee.status === EmployeeStatus.Busy || !employee.windowId) return false;
+      if (!employee || employee.status === EmployeeStatus.Busy || !employee.windowId) return null;
       const window = state.windows.find(w => w.id === employee.windowId);
-      if (!window) return false;
+      if (!window) return null;
 
       const windowTask = window.customTask || 'خدمات عامة';
       let queueIndex = windowTask !== 'خدمات عامة' 
           ? state.queue.findIndex(id => state.customers.find(c => c.id === id)?.serviceName === windowTask)
           : 0;
 
-      if (queueIndex === -1) return false;
+      if (queueIndex === -1) return null;
 
       const nextId = state.queue.splice(queueIndex, 1)[0];
       state.customers = state.customers.map(c => c.id === nextId ? { ...c, status: CustomerStatus.Serving, callTime: new Date(), servedBy: employeeId, windowId: employee.windowId } : c);
@@ -216,15 +213,15 @@ const api = {
       
       saveLocalState(state);
       pushToCloud(state);
-      return true;
+      return state;
   },
 
-  finishService: async (employeeId: number): Promise<boolean> => {
+  finishService: async (employeeId: number): Promise<QueueSystemState | null> => {
       const state = await api.getState();
       const employee = state.employees.find(e => e.id === employeeId);
-      if (!employee || !employee.windowId) return false;
+      if (!employee || !employee.windowId) return null;
       const window = state.windows.find(w => w.id === employee.windowId);
-      if (!window || !window.currentCustomerId) return false;
+      if (!window || !window.currentCustomerId) return null;
 
       const customerId = window.currentCustomerId;
       state.customers = state.customers.map(c => c.id === customerId ? { ...c, status: CustomerStatus.Served, finishTime: new Date() } : c);
@@ -233,24 +230,26 @@ const api = {
 
       saveLocalState(state);
       pushToCloud(state);
-      return true;
+      return state;
   },
 
-  assignEmployeeToWindow: async (employeeId: number, windowId: number): Promise<void> => {
+  assignEmployeeToWindow: async (employeeId: number, windowId: number): Promise<QueueSystemState | null> => {
       const state = await api.getState();
       state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
       state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: windowId } : e);
       state.windows = state.windows.map(w => w.id === windowId ? { ...w, employeeId: employeeId } : w);
       saveLocalState(state);
       pushToCloud(state);
+      return state;
   },
 
-  unassignEmployeeFromWindow: async (employeeId: number): Promise<void> => {
+  unassignEmployeeFromWindow: async (employeeId: number): Promise<QueueSystemState | null> => {
       const state = await api.getState();
       state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
       state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: undefined } : e);
       saveLocalState(state);
       pushToCloud(state);
+      return state;
   },
   
   addEmployee: async (name: string, username: string, password: string): Promise<Employee> => {

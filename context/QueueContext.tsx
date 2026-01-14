@@ -49,7 +49,8 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [meshStatus, setMeshStatus] = useState<PeerStatus>('idle');
   const peerRef = useRef<PeerManager | null>(null);
 
-  const fetchState = useCallback(async () => {
+  const fetchState = useCallback(async (showLoader = false) => {
+    if (showLoader) setIsLoading(true);
     try {
       const serverState = await api.getState();
       setState(serverState);
@@ -67,7 +68,7 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [state, meshStatus]);
 
   useEffect(() => {
-    fetchState();
+    fetchState(true);
   }, [fetchState]);
 
   const handleMeshMessage = (msg: MeshMessage) => {
@@ -110,12 +111,16 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return await peerRef.current.handleOffer(offer);
   };
 
-  const performApiCall = async (apiFunc: () => Promise<any>) => {
+  // وظيفة محسنة لتنفيذ العمليات وتحديث الحالة فوراً
+  const performAction = async (action: () => Promise<QueueSystemState | null>) => {
     try {
-        await apiFunc();
-        await fetchState();
+        const updatedState = await action();
+        if (updatedState) {
+            setState({...updatedState}); // تحديث الحالة فوراً من البيانات المرتجعة
+        }
     } catch (e) {
-      console.error("API Call Error:", e);
+      console.error("Action Call Error:", e);
+      await fetchState(); // في حال الفشل، نقوم بجلب الحالة الأصلية
     }
   };
 
@@ -126,19 +131,19 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         await fetchState();
         return c;
     },
-    callNextCustomer: (id: number) => performApiCall(() => api.callNextCustomer(id)),
-    finishService: (id: number) => performApiCall(() => api.finishService(id)),
-    assignEmployeeToWindow: (eid: number, wid: number) => performApiCall(() => api.assignEmployeeToWindow(eid, wid)),
-    unassignEmployeeFromWindow: (id: number) => performApiCall(() => api.unassignEmployeeFromWindow(id)),
-    addEmployee: (n: string, u: string, p: string) => performApiCall(() => api.addEmployee(n, u, p)),
-    removeEmployee: (id: number) => performApiCall(() => api.removeEmployee(id)),
-    addWindow: (n: string, t?: string) => performApiCall(() => api.addWindow(n, t)),
-    removeWindow: (id: number) => performApiCall(() => api.removeWindow(id)),
-    updateWindowTask: (id: number, t: string) => performApiCall(() => api.updateWindowTask(id, t)),
+    callNextCustomer: (id: number) => performAction(() => api.callNextCustomer(id)),
+    finishService: (id: number) => performAction(() => api.finishService(id)),
+    assignEmployeeToWindow: (eid: number, wid: number) => performAction(() => api.assignEmployeeToWindow(eid, wid)),
+    unassignEmployeeFromWindow: (id: number) => performAction(() => api.unassignEmployeeFromWindow(id)),
+    addEmployee: async (n: string, u: string, p: string) => { await api.addEmployee(n, u, p); await fetchState(); },
+    removeEmployee: async (id: number) => { await api.removeEmployee(id); await fetchState(); },
+    addWindow: async (n: string, t?: string) => { await api.addWindow(n, t); await fetchState(); },
+    removeWindow: async (id: number) => { await api.removeWindow(id); await fetchState(); },
+    updateWindowTask: async (id: number, t: string) => { await api.updateWindowTask(id, t); await fetchState(); },
     authenticateEmployee: api.authenticateEmployee,
     authenticateAdmin: api.authenticateAdmin,
     updateAdminPassword: api.updateAdminPassword,
-    updatePrinterConfig: (c: PrinterConfig) => performApiCall(() => api.updatePrinterConfig(c)),
+    updatePrinterConfig: async (c: PrinterConfig) => { await api.updatePrinterConfig(c); await fetchState(); },
     enableCloudSync, joinCloudSync, disconnectSync,
     startMeshHost, completeMeshHost, joinMeshClient
   };
