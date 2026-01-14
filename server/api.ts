@@ -34,6 +34,15 @@ const DEFAULT_STATE: QueueSystemState = {
   printerConfig: DEFAULT_PRINTER_CONFIG
 };
 
+const getServicePrefix = (serviceName: string): string => {
+  const name = serviceName.toLowerCase();
+  if (name.includes('استقبال')) return 'A';
+  if (name.includes('حساب')) return 'B';
+  if (name.includes('عملاء')) return 'C';
+  if (name.includes('صراف') || name.includes('مالية') || name.includes('سحب')) return 'D';
+  return 'S';
+};
+
 const loadLocalState = (): QueueSystemState => {
   try {
     const savedState = localStorage.getItem(STORAGE_KEY);
@@ -150,12 +159,15 @@ const api = {
 
   addCustomer: async (serviceName?: string): Promise<Customer> => {
     const state = await api.getState();
+    const service = serviceName || 'خدمات عامة';
+    const prefix = getServicePrefix(service);
+    
     const newCustomer: Customer = {
       id: Date.now(),
-      ticketNumber: `ر-${state.ticketCounter}`,
+      ticketNumber: `${prefix}-${state.ticketCounter}`,
       requestTime: new Date(),
       status: CustomerStatus.Waiting,
-      serviceName: serviceName || 'خدمات عامة'
+      serviceName: service
     };
     state.ticketCounter++;
     state.customers.push(newCustomer);

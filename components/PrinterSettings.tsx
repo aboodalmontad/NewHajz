@@ -30,71 +30,77 @@ const PrinterSettings: React.FC = () => {
 
     return (
         <div className="max-w-6xl mx-auto py-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* CSS الطباعة المطور - حل جذري لمشكلة الورقة الفارغة */}
+            {/* استراتيجية طباعة متقدمة لمنع الأوراق الفارغة والظهور الأسود الصريح */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
-                    /* إعدادات الصفحة الأساسية */
                     @page { 
                         margin: 0; 
                         size: ${config.paperWidth === 'A4' ? 'A4' : config.paperWidth + ' auto'}; 
                     }
                     
-                    /* إخفاء كل شيء بشكل افتراضي باستخدام visibility لضمان بقاء العناصر في الـ DOM */
+                    /* إخفاء واجهة التطبيق تماماً */
                     html, body {
                         background: white !important;
                         margin: 0 !important;
                         padding: 0 !important;
-                        visibility: hidden !important;
+                    }
+
+                    #root > *:not(#ticket-print-area) {
+                        display: none !important;
+                    }
+
+                    header, nav, .no-print {
+                        display: none !important;
                     }
                     
                     /* إظهار منطقة الطباعة فقط وبقوة */
                     #ticket-print-area {
-                        visibility: visible !important;
                         display: block !important;
+                        visibility: visible !important;
                         position: absolute !important;
                         left: 0 !important;
                         top: 0 !important;
-                        width: ${config.paperWidth === 'A4' ? '100%' : config.paperWidth} !important;
+                        width: 100% !important;
                         margin: 0 !important;
-                        padding: 8mm 4mm !important;
+                        padding: 10mm 5mm !important;
                         background: white !important;
                         color: black !important;
                         text-align: center !important;
                     }
 
-                    /* ضمان أن جميع النصوص داخل منطقة الطباعة سوداء وظاهرة */
+                    /* ضمان أن جميع الألوان داخل التذكرة سوداء */
                     #ticket-print-area * {
-                        visibility: visible !important;
                         color: black !important;
                         background: transparent !important;
+                        visibility: visible !important;
                     }
 
                     .p-head { font-size: ${config.headerFontSize}px !important; font-weight: bold; margin-bottom: 5px; }
                     .p-num { 
                         font-size: ${config.numberFontSize}px !important; 
                         font-weight: 900; 
-                        margin: 10px 0; 
+                        margin: 15px 0; 
                         border-top: 2px solid black !important; 
                         border-bottom: 2px solid black !important; 
-                        padding: 5px 0;
+                        padding: 10px 0;
                         line-height: 1;
+                        font-family: sans-serif !important;
                     }
                     .p-serv { font-size: ${config.detailsFontSize + 4}px !important; font-weight: bold; }
                     .p-foot { font-size: ${config.detailsFontSize}px !important; margin-top: 10px; line-height: 1.4; }
                     .p-date { font-size: ${config.detailsFontSize - 2}px !important; margin-top: 15px; border-top: 1px dashed black !important; padding-top: 10px; }
                 }
 
-                /* إخفاء منطقة الطباعة في الوضع العادي للشاشة */
                 #ticket-print-area {
                     display: none;
                 }
             ` }} />
 
-            {/* منطقة التذكرة (تظهر في الطباعة فقط) */}
+            {/* منطقة التذكرة الفعلية التي تظهر في الطباعة */}
             <div id="ticket-print-area">
                 <div className="p-head">نظام الطابور الذكي</div>
                 <div className="p-serv">تذكرة تجريبية</div>
-                <div className="p-num">ر-000</div>
+                <div className="p-num">A-000</div>
                 <div className="p-foot">{config.footerText}</div>
                 {config.showDate && (
                     <div className="p-date">
@@ -105,8 +111,8 @@ const PrinterSettings: React.FC = () => {
 
             <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4">
                 <div>
-                    <h2 className="text-4xl font-black text-white tracking-tight">استوديو الطباعة</h2>
-                    <p className="text-slate-400 mt-2 text-lg italic">تحكم كامل في مظهر التذكرة وأبعاد الورق الحراري</p>
+                    <h2 className="text-4xl font-black text-white tracking-tight text-right">استوديو الطباعة</h2>
+                    <p className="text-slate-400 mt-2 text-lg italic text-right">تحكم كامل في مظهر التذكرة وأبعاد الورق</p>
                 </div>
                 <div className="flex gap-4">
                     <Button variant="secondary" onClick={handleTestPrint}>تجربة طباعة</Button>
@@ -116,11 +122,8 @@ const PrinterSettings: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 <div className="space-y-8">
-                    {/* خيارات التحكم */}
                     <Card className="bg-slate-800 p-8 border border-slate-700 space-y-6">
-                        <h3 className="text-xl font-bold text-sky-400 flex items-center gap-2">
-                             أبعاد الورق والخطوط
-                        </h3>
+                        <h3 className="text-xl font-bold text-sky-400 text-right">أبعاد الورق والخطوط</h3>
                         
                         <div className="grid grid-cols-2 gap-6">
                             <div>
@@ -176,9 +179,7 @@ const PrinterSettings: React.FC = () => {
                     </Card>
 
                     <Card className="bg-slate-800 p-8 border border-slate-700 space-y-6">
-                        <h3 className="text-xl font-bold text-sky-400 flex items-center gap-2">
-                            نص التذكرة والرسائل
-                        </h3>
+                        <h3 className="text-xl font-bold text-sky-400 text-right">نص التذكرة والرسائل</h3>
                         <div>
                             <label className="text-sm text-slate-400 block mb-2 font-medium">رسالة تذييل التذكرة</label>
                             <textarea 
@@ -187,14 +188,13 @@ const PrinterSettings: React.FC = () => {
                                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white min-h-[100px] outline-none"
                             />
                         </div>
-                        <div className="flex items-center gap-3">
-                            <input type="checkbox" checked={config.showDate} onChange={e => setConfig({...config, showDate: e.target.checked})} className="w-5 h-5 rounded accent-sky-500"/>
+                        <div className="flex items-center gap-3 justify-end">
                             <label className="text-slate-300 font-medium">إظهار التاريخ والوقت في التذكرة</label>
+                            <input type="checkbox" checked={config.showDate} onChange={e => setConfig({...config, showDate: e.target.checked})} className="w-5 h-5 rounded accent-sky-500"/>
                         </div>
                     </Card>
                 </div>
 
-                {/* المعاينة المباشرة على الشاشة */}
                 <div className="sticky top-10">
                     <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4 text-center">المعاينة على الشاشة</h3>
                     <div className="flex justify-center">
@@ -209,7 +209,7 @@ const PrinterSettings: React.FC = () => {
                             
                             <div className="py-6 border-b-2 border-black border-dashed">
                                 <p style={{ fontSize: `${config.detailsFontSize + 2}px` }} className="font-bold">تذكرة تجريبية</p>
-                                <div style={{ fontSize: `${config.numberFontSize}px` }} className="font-black my-4 leading-none">ر-000</div>
+                                <div style={{ fontSize: `${config.numberFontSize}px` }} className="font-black my-4 leading-none font-sans">A-000</div>
                                 <p style={{ fontSize: `${config.detailsFontSize}px` }}>يرجى الانتظار في صالة الاستقبال</p>
                             </div>
 

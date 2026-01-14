@@ -65,7 +65,7 @@ const KioskView: React.FC = () => {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
-            {/* استراتيجية الطباعة الموثوقة - لا تستخدم display: none على العناصر الأبوية */}
+            {/* استراتيجية الطباعة الموثوقة - فرض اللون الأسود ومنع تداخل الثيم الداكن */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page { 
@@ -73,18 +73,23 @@ const KioskView: React.FC = () => {
                         size: ${printerConfig.paperWidth === 'A4' ? 'A4' : printerConfig.paperWidth + ' auto'}; 
                     }
                     
-                    /* إخفاء الصفحة بالكامل باستخدام visibility */
                     html, body {
                         background: white !important;
                         margin: 0 !important;
                         padding: 0 !important;
-                        visibility: hidden !important;
+                    }
+
+                    #root > *:not(#ticket-print-area) {
+                        display: none !important;
+                    }
+
+                    header, nav, footer, .no-print {
+                        display: none !important;
                     }
                     
-                    /* إظهار منطقة التذكرة فقط وبقوة */
                     #ticket-print-area {
-                        visibility: visible !important;
                         display: block !important;
+                        visibility: visible !important;
                         position: absolute !important;
                         left: 0 !important;
                         top: 0 !important;
@@ -94,6 +99,7 @@ const KioskView: React.FC = () => {
                         background: white !important;
                         color: black !important;
                         text-align: center !important;
+                        box-sizing: border-box !important;
                     }
                     
                     #ticket-print-area * { 
@@ -111,13 +117,12 @@ const KioskView: React.FC = () => {
                         border-bottom: 2px solid black !important; 
                         padding: 10px 0;
                         line-height: 1;
-                        font-family: monospace;
+                        font-family: sans-serif !important;
                     }
                     .p-serv { font-size: ${printerConfig.detailsFontSize + 4}px !important; font-weight: bold; }
                     .p-foot { font-size: ${printerConfig.detailsFontSize}px !important; margin-top: 10px; line-height: 1.4; }
                 }
 
-                /* إخفاء منطقة الطباعة عن الشاشة العادية */
                 #ticket-print-area {
                     display: none;
                 }
@@ -143,7 +148,7 @@ const KioskView: React.FC = () => {
                 <>
                     <h1 className="text-6xl font-black text-white mb-6 tracking-tighter">مرحباً بك</h1>
                     <p className="text-2xl text-slate-400 mb-12">يرجى اختيار الخدمة للحصول على رقم دورك</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 w-full max-w-6xl px-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 w-full max-w-6xl px-4 text-right">
                         {dynamicServices.map(service => (
                             <ServiceOption 
                                 key={service.name} 
@@ -158,7 +163,7 @@ const KioskView: React.FC = () => {
             ) : (
                 <div className="bg-slate-800 p-12 rounded-[3.5rem] shadow-2xl border-2 border-sky-500/50 max-w-lg w-full animate-in zoom-in">
                     <p className="text-xl text-slate-400 mb-2 font-medium">تم إصدار رقمك بنجاح</p>
-                    <h2 className="text-[10rem] font-mono font-black text-yellow-400 leading-none my-6 tracking-tighter">
+                    <h2 className="text-[10rem] font-sans font-black text-yellow-400 leading-none my-6 tracking-tighter">
                         {lastTicket.ticketNumber}
                     </h2>
                     <div className="flex flex-col gap-4 mt-8">
