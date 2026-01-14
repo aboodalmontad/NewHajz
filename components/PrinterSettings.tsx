@@ -23,55 +23,67 @@ const PrinterSettings: React.FC = () => {
     };
 
     const handleTestPrint = () => {
-        // نستخدم مهلة بسيطة لضمان تحديث الـ DOM قبل استدعاء نافذة الطباعة
+        // نستخدم مهلة بسيطة لضمان تحديث الـ DOM
         setTimeout(() => {
             window.print();
-        }, 100);
+        }, 150);
     };
 
     if (!state) return null;
 
     return (
         <div className="max-w-6xl mx-auto py-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* CSS الطباعة المحسن - يضمن عدم ظهور ورقة فارغة */}
+            {/* CSS الطباعة الجذري - يحل مشكلة الورقة الفارغة تماماً */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
-                    @page { margin: 0; size: ${config.paperWidth} auto; }
+                    /* إعدادات الصفحة */
+                    @page { 
+                        margin: 0; 
+                        size: ${config.paperWidth === 'A4' ? 'A4' : config.paperWidth + ' auto'}; 
+                    }
                     
-                    /* إخفاء واجهة التطبيق بالكامل */
-                    html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
-                    #root, header, main, nav, .no-print { display: none !important; visibility: hidden !important; }
+                    /* إخفاء كل شيء في الصفحة */
+                    body { 
+                        visibility: hidden !important; 
+                        background: white !important;
+                    }
                     
-                    /* إظهار منطقة التذكرة فقط وبقوة */
+                    /* إظهار منطقة التذكرة فقط وبدقة عالية */
                     #ticket-print-area {
-                        display: block !important;
                         visibility: visible !important;
+                        display: block !important;
                         position: absolute !important;
                         left: 0 !important;
                         top: 0 !important;
-                        width: 100% !important;
+                        width: ${config.paperWidth === 'A4' ? '210mm' : config.paperWidth} !important;
                         margin: 0 !important;
                         padding: 10mm 5mm !important;
                         background: white !important;
                         color: black !important;
                         text-align: center !important;
+                        box-sizing: border-box !important;
                     }
-                    
-                    #ticket-print-area * { visibility: visible !important; }
+
+                    /* ضمان ظهور النصوص باللون الأسود */
+                    #ticket-print-area * { 
+                        visibility: visible !important; 
+                        color: black !important;
+                        background: transparent !important;
+                    }
 
                     .p-head { font-size: ${config.headerFontSize}px !important; font-weight: bold; margin-bottom: 5px; }
                     .p-num { 
                         font-size: ${config.numberFontSize}px !important; 
                         font-weight: 900; 
                         margin: 15px 0; 
-                        border-top: 2px solid black; 
-                        border-bottom: 2px solid black; 
+                        border-top: 2px solid black !important; 
+                        border-bottom: 2px solid black !important; 
                         padding: 10px 0;
                         line-height: 1;
                     }
                     .p-serv { font-size: ${config.detailsFontSize + 4}px !important; font-weight: bold; }
                     .p-foot { font-size: ${config.detailsFontSize}px !important; margin-top: 10px; line-height: 1.4; }
-                    .p-date { font-size: ${config.detailsFontSize - 2}px !important; margin-top: 15px; border-top: 1px dashed black; padding-top: 10px; }
+                    .p-date { font-size: ${config.detailsFontSize - 2}px !important; margin-top: 15px; border-top: 1px dashed black !important; padding-top: 10px; }
                 }
 
                 /* إخفاء منطقة الطباعة عن الشاشة العادية */
@@ -81,7 +93,7 @@ const PrinterSettings: React.FC = () => {
             ` }} />
 
             {/* عنصر التذكرة الذي سيظهر عند الطباعة فقط */}
-            <div id="ticket-print-area">
+            <div id="ticket-print-area" className="print-only">
                 <div className="p-head">نظام الطابور الذكي</div>
                 <div className="p-serv">تذكرة تجريبية</div>
                 <div className="p-num">ر-000</div>
@@ -99,8 +111,8 @@ const PrinterSettings: React.FC = () => {
                     <p className="text-slate-400 mt-2 text-lg italic">تحكم كامل في مظهر التذكرة وأبعاد الورق الحراري</p>
                 </div>
                 <div className="flex gap-4">
-                    <Button variant="secondary" onClick={handleTestPrint}>تجربة طباعة</Button>
-                    <Button onClick={handleSave}>حفظ الإعدادات</Button>
+                    <Button variant="secondary" className="hover:scale-105 active:scale-95 transition-transform" onClick={handleTestPrint}>تجربة طباعة</Button>
+                    <Button className="hover:scale-105 active:scale-95 transition-transform" onClick={handleSave}>حفظ الإعدادات</Button>
                 </div>
             </div>
 
@@ -144,7 +156,7 @@ const PrinterSettings: React.FC = () => {
                                     <label className="text-sm text-slate-400 font-medium">حجم خط العنوان</label>
                                     <span className="text-sky-500 font-mono text-xs">{config.headerFontSize}px</span>
                                 </div>
-                                <input type="range" min="12" max="40" value={config.headerFontSize} onChange={e => setConfig({...config, headerFontSize: parseInt(e.target.value)})} className="w-full accent-sky-500"/>
+                                <input type="range" min="12" max="40" value={config.headerFontSize} onChange={e => setConfig({...config, headerFontSize: parseInt(e.target.value)})} className="w-full accent-sky-500 cursor-pointer"/>
                             </div>
                             
                             <div>
@@ -152,7 +164,7 @@ const PrinterSettings: React.FC = () => {
                                     <label className="text-sm text-slate-400 font-medium">حجم خط الرقم الكبير</label>
                                     <span className="text-sky-500 font-mono text-xs">{config.numberFontSize}px</span>
                                 </div>
-                                <input type="range" min="40" max="120" value={config.numberFontSize} onChange={e => setConfig({...config, numberFontSize: parseInt(e.target.value)})} className="w-full accent-sky-500"/>
+                                <input type="range" min="40" max="120" value={config.numberFontSize} onChange={e => setConfig({...config, numberFontSize: parseInt(e.target.value)})} className="w-full accent-sky-500 cursor-pointer"/>
                             </div>
 
                             <div>
@@ -160,7 +172,7 @@ const PrinterSettings: React.FC = () => {
                                     <label className="text-sm text-slate-400 font-medium">حجم خط التفاصيل</label>
                                     <span className="text-sky-500 font-mono text-xs">{config.detailsFontSize}px</span>
                                 </div>
-                                <input type="range" min="8" max="24" value={config.detailsFontSize} onChange={e => setConfig({...config, detailsFontSize: parseInt(e.target.value)})} className="w-full accent-sky-500"/>
+                                <input type="range" min="8" max="24" value={config.detailsFontSize} onChange={e => setConfig({...config, detailsFontSize: parseInt(e.target.value)})} className="w-full accent-sky-500 cursor-pointer"/>
                             </div>
                         </div>
                     </Card>
@@ -181,13 +193,13 @@ const PrinterSettings: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-3">
                             <input type="checkbox" checked={config.showDate} onChange={e => setConfig({...config, showDate: e.target.checked})} className="w-5 h-5 rounded accent-sky-500 cursor-pointer"/>
-                            <label className="text-slate-300 font-medium">إظهار التاريخ والوقت في التذكرة</label>
+                            <label className="text-slate-300 font-medium cursor-pointer">إظهار التاريخ والوقت في التذكرة</label>
                         </div>
                     </Card>
                 </div>
 
                 <div className="sticky top-10">
-                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4 text-center">المعاينة الحية (Live Preview)</h3>
+                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4 text-center">المعاينة الحية (على الشاشة)</h3>
                     <div className="flex justify-center">
                         <div 
                             style={{ width: config.paperWidth === 'A4' ? '210mm' : config.paperWidth }}

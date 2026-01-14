@@ -69,19 +69,22 @@ const KioskView: React.FC = () => {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
-            {/* إعدادات الطباعة المحسنة */}
+            {/* إعدادات الطباعة المحسنة - الاستراتيجية المضمونة */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
-                    @page { margin: 0; size: ${printerConfig.paperWidth} auto; }
-                    html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+                    @page { 
+                        margin: 0; 
+                        size: ${printerConfig.paperWidth === 'A4' ? 'A4' : printerConfig.paperWidth + ' auto'}; 
+                    }
                     
-                    /* إخفاء واجهة التطبيق تماماً */
-                    #root, header, main, .no-print { display: none !important; visibility: hidden !important; }
+                    body { 
+                        visibility: hidden !important; 
+                        background: white !important; 
+                    }
                     
-                    /* إظهار منطقة الطباعة فقط */
                     #ticket-print-area {
-                        display: block !important;
                         visibility: visible !important;
+                        display: block !important;
                         position: absolute !important;
                         left: 0 !important;
                         top: 0 !important;
@@ -91,17 +94,21 @@ const KioskView: React.FC = () => {
                         background: white !important;
                         color: black !important;
                         text-align: center !important;
+                        box-sizing: border-box !important;
                     }
                     
-                    #ticket-print-area * { visibility: visible !important; }
+                    #ticket-print-area * { 
+                        visibility: visible !important; 
+                        color: black !important;
+                    }
 
                     .p-head { font-size: ${printerConfig.headerFontSize}px !important; font-weight: bold; margin-bottom: 5px; }
                     .p-num { 
                         font-size: ${printerConfig.numberFontSize}px !important; 
                         font-weight: 900; 
                         margin: 10px 0; 
-                        border-top: 2px solid black; 
-                        border-bottom: 2px solid black; 
+                        border-top: 2px solid black !important; 
+                        border-bottom: 2px solid black !important; 
                         padding: 10px 0;
                         line-height: 1;
                         font-family: monospace;
@@ -174,7 +181,7 @@ const KioskView: React.FC = () => {
                     </div>
 
                     <div className="flex flex-col gap-4">
-                        <Button variant="primary" className="w-full py-5 !rounded-2xl text-2xl font-black shadow-xl hover:scale-105 active:scale-95" onClick={() => window.print()}>
+                        <Button variant="primary" className="w-full py-5 !rounded-2xl text-2xl font-black shadow-xl hover:scale-105 active:scale-95 transition-all" onClick={() => window.print()}>
                             {printerConfig.autoPrint ? 'إعادة الطباعة' : 'طباعة التذكرة'}
                         </Button>
                         <Button variant="secondary" className="w-full py-5 !rounded-2xl text-xl font-bold opacity-60 hover:opacity-100" onClick={() => setLastTicket(null)}>
