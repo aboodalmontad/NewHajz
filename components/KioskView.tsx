@@ -23,12 +23,8 @@ const KioskView: React.FC = () => {
     useEffect(() => {
         if (lastTicket && state?.printerConfig.autoPrint) {
             const timer = setTimeout(() => {
-                try {
-                    window.print();
-                } catch (e) {
-                    console.error("Print call failed:", e);
-                }
-            }, 250);
+                window.print();
+            }, 300);
             return () => clearTimeout(timer);
         }
     }, [lastTicket, state?.printerConfig.autoPrint]);
@@ -69,7 +65,7 @@ const KioskView: React.FC = () => {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
-            {/* إعدادات الطباعة المحسنة - الاستراتيجية المضمونة */}
+            {/* استراتيجية الطباعة الموثوقة - لا تستخدم display: none على العناصر الأبوية */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page { 
@@ -77,11 +73,15 @@ const KioskView: React.FC = () => {
                         size: ${printerConfig.paperWidth === 'A4' ? 'A4' : printerConfig.paperWidth + ' auto'}; 
                     }
                     
-                    body { 
-                        visibility: hidden !important; 
-                        background: white !important; 
+                    /* إخفاء الصفحة بالكامل باستخدام visibility */
+                    html, body {
+                        background: white !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        visibility: hidden !important;
                     }
                     
+                    /* إظهار منطقة التذكرة فقط وبقوة */
                     #ticket-print-area {
                         visibility: visible !important;
                         display: block !important;
@@ -94,12 +94,12 @@ const KioskView: React.FC = () => {
                         background: white !important;
                         color: black !important;
                         text-align: center !important;
-                        box-sizing: border-box !important;
                     }
                     
                     #ticket-print-area * { 
                         visibility: visible !important; 
-                        color: black !important;
+                        color: black !important; 
+                        background: transparent !important;
                     }
 
                     .p-head { font-size: ${printerConfig.headerFontSize}px !important; font-weight: bold; margin-bottom: 5px; }
@@ -113,10 +113,11 @@ const KioskView: React.FC = () => {
                         line-height: 1;
                         font-family: monospace;
                     }
+                    .p-serv { font-size: ${printerConfig.detailsFontSize + 4}px !important; font-weight: bold; }
                     .p-foot { font-size: ${printerConfig.detailsFontSize}px !important; margin-top: 10px; line-height: 1.4; }
                 }
 
-                /* إخفاء عن الشاشة العادية */
+                /* إخفاء منطقة الطباعة عن الشاشة العادية */
                 #ticket-print-area {
                     display: none;
                 }
@@ -126,7 +127,7 @@ const KioskView: React.FC = () => {
                 {lastTicket && (
                     <>
                         <div className="p-head">نظام الطابور الذكي</div>
-                        <div className="p-foot" style={{fontWeight: 'bold', fontSize: '1.2em'}}>{lastTicket.serviceName}</div>
+                        <div className="p-serv">{lastTicket.serviceName}</div>
                         <div className="p-num">{lastTicket.ticketNumber}</div>
                         <div className="p-foot">{printerConfig.footerText}</div>
                         {printerConfig.showDate && (
@@ -140,9 +141,8 @@ const KioskView: React.FC = () => {
 
             {!lastTicket ? (
                 <>
-                    <h1 className="text-6xl font-black text-white mb-6 tracking-tighter animate-in fade-in slide-in-from-top-4 duration-1000">مرحباً بك</h1>
+                    <h1 className="text-6xl font-black text-white mb-6 tracking-tighter">مرحباً بك</h1>
                     <p className="text-2xl text-slate-400 mb-12">يرجى اختيار الخدمة للحصول على رقم دورك</p>
-                    
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 w-full max-w-6xl px-4">
                         {dynamicServices.map(service => (
                             <ServiceOption 
@@ -156,35 +156,16 @@ const KioskView: React.FC = () => {
                     </div>
                 </>
             ) : (
-                <div className="bg-slate-800 p-12 rounded-[3.5rem] shadow-2xl border-2 border-sky-500/50 max-w-lg w-full transform animate-in zoom-in duration-300">
-                    <div className="mb-8 flex justify-center">
-                        <div className="bg-green-500/20 text-green-400 p-6 rounded-full ring-8 ring-green-500/10 animate-pulse">
-                            <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                        </div>
-                    </div>
+                <div className="bg-slate-800 p-12 rounded-[3.5rem] shadow-2xl border-2 border-sky-500/50 max-w-lg w-full animate-in zoom-in">
                     <p className="text-xl text-slate-400 mb-2 font-medium">تم إصدار رقمك بنجاح</p>
-                    <h2 className="text-[10rem] font-mono font-black text-yellow-400 leading-none my-6 tracking-tighter drop-shadow-[0_0_30px_rgba(250,204,21,0.5)]">
+                    <h2 className="text-[10rem] font-mono font-black text-yellow-400 leading-none my-6 tracking-tighter">
                         {lastTicket.ticketNumber}
                     </h2>
-                    
-                    <div className="bg-sky-500/10 py-6 rounded-3xl border border-sky-500/20 mb-10">
-                         <div className="flex items-center justify-center gap-4 text-sky-400 mb-2">
-                             {printerConfig.autoPrint ? (
-                                 <>
-                                    <div className="w-4 h-4 bg-sky-500 rounded-full animate-ping"></div>
-                                    <p className="text-2xl font-black">جاري الطباعة...</p>
-                                 </>
-                             ) : (
-                                 <p className="text-2xl font-black">اضغط لطباعة التذكرة</p>
-                             )}
-                         </div>
-                    </div>
-
-                    <div className="flex flex-col gap-4">
-                        <Button variant="primary" className="w-full py-5 !rounded-2xl text-2xl font-black shadow-xl hover:scale-105 active:scale-95 transition-all" onClick={() => window.print()}>
-                            {printerConfig.autoPrint ? 'إعادة الطباعة' : 'طباعة التذكرة'}
+                    <div className="flex flex-col gap-4 mt-8">
+                        <Button variant="primary" className="w-full py-5 !rounded-2xl text-2xl font-black" onClick={() => window.print()}>
+                            طـبـاعة الـتذكرة
                         </Button>
-                        <Button variant="secondary" className="w-full py-5 !rounded-2xl text-xl font-bold opacity-60 hover:opacity-100" onClick={() => setLastTicket(null)}>
+                        <Button variant="secondary" className="w-full py-5 !rounded-2xl text-xl font-bold opacity-60" onClick={() => setLastTicket(null)}>
                             العودة للرئيسية
                         </Button>
                     </div>
