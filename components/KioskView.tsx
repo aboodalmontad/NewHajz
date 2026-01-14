@@ -65,7 +65,7 @@ const KioskView: React.FC = () => {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
-            {/* استراتيجية الطباعة الموثوقة - فرض اللون الأسود ومنع تداخل الثيم الداكن */}
+            {/* استراتيجية الطباعة الموثوقة - فرض اللون الأسود الصريح ومنع تداخل الثيم الداكن */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page { 
@@ -74,9 +74,12 @@ const KioskView: React.FC = () => {
                     }
                     
                     html, body {
-                        background: white !important;
+                        background-color: #ffffff !important;
+                        color: #000000 !important;
                         margin: 0 !important;
                         padding: 0 !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
                     }
 
                     #root > *:not(#ticket-print-area) {
@@ -94,33 +97,36 @@ const KioskView: React.FC = () => {
                         left: 0 !important;
                         top: 0 !important;
                         width: 100% !important;
-                        margin: 0 !important;
+                        margin: 0 auto !important;
                         padding: 10mm 5mm !important;
-                        background: white !important;
-                        color: black !important;
+                        background: #ffffff !important;
+                        color: #000000 !important;
                         text-align: center !important;
                         box-sizing: border-box !important;
+                        font-family: Arial, sans-serif !important;
                     }
                     
-                    #ticket-print-area * { 
-                        visibility: visible !important; 
-                        color: black !important; 
+                    #ticket-print-area div,
+                    #ticket-print-area p,
+                    #ticket-print-area span { 
+                        color: #000000 !important; 
                         background: transparent !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
                     }
 
-                    .p-head { font-size: ${printerConfig.headerFontSize}px !important; font-weight: bold; margin-bottom: 5px; }
+                    .p-head { font-size: ${printerConfig.headerFontSize}px !important; font-weight: bold !important; margin-bottom: 5px !important; line-height: 1.2 !important; }
                     .p-num { 
                         font-size: ${printerConfig.numberFontSize}px !important; 
-                        font-weight: 900; 
-                        margin: 10px 0; 
-                        border-top: 2px solid black !important; 
-                        border-bottom: 2px solid black !important; 
-                        padding: 10px 0;
-                        line-height: 1;
-                        font-family: sans-serif !important;
+                        font-weight: 900 !important; 
+                        margin: 15px 0 !important; 
+                        border-top: 3px solid #000000 !important; 
+                        border-bottom: 3px solid #000000 !important; 
+                        padding: 15px 0 !important;
+                        line-height: 1 !important;
                     }
-                    .p-serv { font-size: ${printerConfig.detailsFontSize + 4}px !important; font-weight: bold; }
-                    .p-foot { font-size: ${printerConfig.detailsFontSize}px !important; margin-top: 10px; line-height: 1.4; }
+                    .p-serv { font-size: ${printerConfig.detailsFontSize + 4}px !important; font-weight: bold !important; }
+                    .p-foot { font-size: ${printerConfig.detailsFontSize}px !important; margin-top: 10px !important; line-height: 1.5 !important; }
                 }
 
                 #ticket-print-area {

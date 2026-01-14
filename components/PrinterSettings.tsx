@@ -30,7 +30,7 @@ const PrinterSettings: React.FC = () => {
 
     return (
         <div className="max-w-6xl mx-auto py-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* استراتيجية طباعة متقدمة لمنع الأوراق الفارغة والظهور الأسود الصريح */}
+            {/* استراتيجية الطباعة الموثوقة - تحويل كل شيء للأسود الصريح */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page { 
@@ -38,13 +38,17 @@ const PrinterSettings: React.FC = () => {
                         size: ${config.paperWidth === 'A4' ? 'A4' : config.paperWidth + ' auto'}; 
                     }
                     
-                    /* إخفاء واجهة التطبيق تماماً */
+                    /* تصفير خلفية الصفحة وفرض الألوان */
                     html, body {
-                        background: white !important;
+                        background-color: #ffffff !important;
+                        color: #000000 !important;
                         margin: 0 !important;
                         padding: 0 !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
                     }
 
+                    /* إخفاء كل شيء ما عدا منطقة التذكرة */
                     #root > *:not(#ticket-print-area) {
                         display: none !important;
                     }
@@ -53,7 +57,7 @@ const PrinterSettings: React.FC = () => {
                         display: none !important;
                     }
                     
-                    /* إظهار منطقة الطباعة فقط وبقوة */
+                    /* منطقة التذكرة - التموضع واللون */
                     #ticket-print-area {
                         display: block !important;
                         visibility: visible !important;
@@ -61,34 +65,40 @@ const PrinterSettings: React.FC = () => {
                         left: 0 !important;
                         top: 0 !important;
                         width: 100% !important;
-                        margin: 0 !important;
+                        max-width: ${config.paperWidth === 'A4' ? '100%' : config.paperWidth} !important;
+                        margin: 0 auto !important;
                         padding: 10mm 5mm !important;
-                        background: white !important;
-                        color: black !important;
+                        background: #ffffff !important;
+                        color: #000000 !important;
                         text-align: center !important;
+                        box-sizing: border-box !important;
+                        font-family: Arial, sans-serif !important;
                     }
 
-                    /* ضمان أن جميع الألوان داخل التذكرة سوداء */
-                    #ticket-print-area * {
-                        color: black !important;
+                    /* إجبار كافة العناصر الداخلية على اللون الأسود */
+                    #ticket-print-area div, 
+                    #ticket-print-area p, 
+                    #ticket-print-area span,
+                    #ticket-print-area h1 {
+                        color: #000000 !important;
                         background: transparent !important;
-                        visibility: visible !important;
+                        border-color: #000000 !important;
+                        opacity: 1 !important;
                     }
 
-                    .p-head { font-size: ${config.headerFontSize}px !important; font-weight: bold; margin-bottom: 5px; }
+                    .p-head { font-size: ${config.headerFontSize}px !important; font-weight: bold; margin-bottom: 8px; line-height: 1.2; }
                     .p-num { 
                         font-size: ${config.numberFontSize}px !important; 
-                        font-weight: 900; 
-                        margin: 15px 0; 
-                        border-top: 2px solid black !important; 
-                        border-bottom: 2px solid black !important; 
-                        padding: 10px 0;
-                        line-height: 1;
-                        font-family: sans-serif !important;
+                        font-weight: 900 !important; 
+                        margin: 15px 0 !important; 
+                        border-top: 3px solid #000000 !important; 
+                        border-bottom: 3px solid #000000 !important; 
+                        padding: 15px 0 !important;
+                        line-height: 1 !important;
                     }
                     .p-serv { font-size: ${config.detailsFontSize + 4}px !important; font-weight: bold; }
-                    .p-foot { font-size: ${config.detailsFontSize}px !important; margin-top: 10px; line-height: 1.4; }
-                    .p-date { font-size: ${config.detailsFontSize - 2}px !important; margin-top: 15px; border-top: 1px dashed black !important; padding-top: 10px; }
+                    .p-foot { font-size: ${config.detailsFontSize}px !important; margin-top: 10px; line-height: 1.5; }
+                    .p-date { font-size: ${config.detailsFontSize - 2}px !important; margin-top: 15px; border-top: 1px dashed #000000 !important; padding-top: 10px; }
                 }
 
                 #ticket-print-area {
@@ -96,7 +106,7 @@ const PrinterSettings: React.FC = () => {
                 }
             ` }} />
 
-            {/* منطقة التذكرة الفعلية التي تظهر في الطباعة */}
+            {/* منطقة التذكرة الفعلية التي تظهر في الطباعة فقط */}
             <div id="ticket-print-area">
                 <div className="p-head">نظام الطابور الذكي</div>
                 <div className="p-serv">تذكرة تجريبية</div>
@@ -185,7 +195,8 @@ const PrinterSettings: React.FC = () => {
                             <textarea 
                                 value={config.footerText}
                                 onChange={e => setConfig({...config, footerText: e.target.value})}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white min-h-[100px] outline-none"
+                                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white min-h-[100px] outline-none text-right"
+                                dir="rtl"
                             />
                         </div>
                         <div className="flex items-center gap-3 justify-end">
@@ -200,26 +211,26 @@ const PrinterSettings: React.FC = () => {
                     <div className="flex justify-center">
                         <div 
                             style={{ width: config.paperWidth === 'A4' ? '210mm' : config.paperWidth }}
-                            className="bg-white p-6 text-black text-center transition-all duration-300 transform scale-90 origin-top shadow-2xl"
+                            className="bg-white p-6 text-black text-center transition-all duration-300 transform scale-90 origin-top shadow-2xl border border-slate-200"
                         >
                             <div className="border-b-2 border-black pb-4 mb-4">
-                                <h1 style={{ fontSize: `${config.headerFontSize}px` }} className="font-bold">نظام الطابور الذكي</h1>
-                                <p style={{ fontSize: `${config.detailsFontSize}px` }} className="opacity-70">مركز الخدمات الموحد</p>
+                                <h1 style={{ fontSize: `${config.headerFontSize}px` }} className="font-bold text-black">نظام الطابور الذكي</h1>
+                                <p style={{ fontSize: `${config.detailsFontSize}px` }} className="text-black opacity-70">مركز الخدمات الموحد</p>
                             </div>
                             
                             <div className="py-6 border-b-2 border-black border-dashed">
-                                <p style={{ fontSize: `${config.detailsFontSize + 2}px` }} className="font-bold">تذكرة تجريبية</p>
-                                <div style={{ fontSize: `${config.numberFontSize}px` }} className="font-black my-4 leading-none font-sans">A-000</div>
-                                <p style={{ fontSize: `${config.detailsFontSize}px` }}>يرجى الانتظار في صالة الاستقبال</p>
+                                <p style={{ fontSize: `${config.detailsFontSize + 2}px` }} className="font-bold text-black text-right pr-2">تذكرة تجريبية</p>
+                                <div style={{ fontSize: `${config.numberFontSize}px` }} className="font-black my-4 leading-none font-sans text-black">A-000</div>
+                                <p style={{ fontSize: `${config.detailsFontSize}px` }} className="text-black">يرجى الانتظار في صالة الاستقبال</p>
                             </div>
 
                             <div className="mt-6 space-y-2">
                                 {config.showDate && (
-                                    <p style={{ fontSize: `${config.detailsFontSize - 2}px` }}>
+                                    <p style={{ fontSize: `${config.detailsFontSize - 2}px` }} className="text-black">
                                         {new Date().toLocaleTimeString('ar-EG')} | {new Date().toLocaleDateString('ar-EG')}
                                     </p>
                                 )}
-                                <p style={{ fontSize: `${config.detailsFontSize}px` }} className="font-medium italic">
+                                <p style={{ fontSize: `${config.detailsFontSize}px` }} className="font-medium italic text-black whitespace-pre-wrap">
                                     {config.footerText}
                                 </p>
                             </div>
