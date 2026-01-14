@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Button } from './shared/Button';
 import { Card } from './shared/Card';
@@ -15,17 +15,27 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
     const [offerToken, setOfferToken] = useState('');
     const [answerToken, setAnswerToken] = useState('');
 
-    const { state, authenticateEmployee, authenticateAdmin, joinCloudSync, joinMeshClient, disconnectSync } = useQueueSystem();
+    const { state, authenticateEmployee, authenticateAdmin, joinCloudSync, joinMeshClient, disconnectSync, meshStatus } = useQueueSystem();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+
+    // مراقبة حالة الربط المحلي
+    useEffect(() => {
+        if (meshStatus === 'connected') {
+            alert("✅ تم الربط بنجاح! يمكنك الآن اختيار الوضع المناسب.");
+            setLoginMode('none');
+        } else if (meshStatus === 'failed') {
+            alert("❌ فشل الربط المحلي. يرجى مراجعة الكود.");
+        }
+    }, [meshStatus]);
 
     const handleCloudJoin = async () => {
         const success = await joinCloudSync(syncIdInput);
         if (success) {
-            alert("تم الربط السحابي الدائم بنجاح!");
+            alert("✅ تم الربط السحابي الدائم بنجاح! سيتذكر الجهاز هذا الارتباط تلقائياً.");
             setLoginMode('none');
         } else {
-            alert("فشل الربط، تأكد من الـ Sync ID.");
+            alert("❌ فشل الربط، تأكد من الـ Sync ID.");
         }
     };
 
@@ -34,7 +44,7 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
             const answer = await joinMeshClient(offerToken);
             setAnswerToken(answer);
         } catch (e) {
-            alert("كود غير صالح.");
+            alert("❌ الكود غير صالح.");
         }
     };
 
@@ -44,11 +54,13 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
         <div className="max-w-6xl mx-auto text-center mt-8 pb-20 px-4 animate-in fade-in duration-500">
             <h1 className="text-5xl font-extrabold text-white mb-4 tracking-tighter">نظام الطابور الذكي</h1>
             
-            {isLinked && (
+            {(isLinked || meshStatus === 'connected') && (
                 <div className="flex items-center justify-center gap-2 mb-12">
                     <span className="flex h-3 w-3 rounded-full bg-green-500 animate-pulse"></span>
                     <span className="text-slate-400 text-sm font-medium">الجهاز مرتبط حالياً بنظام: </span>
-                    <span className="bg-slate-800 text-sky-400 px-3 py-1 rounded-lg text-xs font-mono font-bold border border-slate-700">{state.syncId}</span>
+                    <span className="bg-slate-800 text-sky-400 px-3 py-1 rounded-lg text-xs font-mono font-bold border border-slate-700">
+                        {state?.syncId || 'ربط محلي نشط'}
+                    </span>
                 </div>
             )}
 
@@ -69,7 +81,7 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
                         <p className="text-slate-500 text-xs mt-2">لعرض الأرقام التي يتم خدمتها حالياً</p>
                     </Card>
                     
-                    {!isLinked ? (
+                    {!isLinked && meshStatus !== 'connected' ? (
                         <Card className="bg-slate-800 p-8 cursor-pointer border-2 border-dashed border-sky-500/30 hover:bg-sky-500/5 group" onClick={() => setLoginMode('sync_join')}>
                             <div className="text-sky-400 mb-4 group-hover:rotate-12 transition-transform">
                                 <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
