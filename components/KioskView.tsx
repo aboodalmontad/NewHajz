@@ -23,12 +23,25 @@ const KioskView: React.FC = () => {
     const [lastTicket, setLastTicket] = useState<Customer | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isPrinting, setIsPrinting] = useState(false);
+
+    // معالج الطباعة والعودة للرئيسية
+    const handlePrintAndReset = () => {
+        setIsPrinting(true);
+        // ننتظر قليلاً لضمان رندر التذكرة في الـ Portal قبل الطباعة
+        setTimeout(() => {
+            window.print();
+            // العودة للقائمة الرئيسية فوراً بعد إرسال أمر الطباعة
+            setLastTicket(null);
+            setIsPrinting(false);
+        }, 100);
+    };
 
     useEffect(() => {
         if (lastTicket && state?.printerConfig.autoPrint) {
             const timer = setTimeout(() => {
-                window.print();
-            }, 600);
+                handlePrintAndReset();
+            }, 1200); // مهلة قصيرة لرؤية الرقم ثم الطباعة والعودة تلقائياً
             return () => clearTimeout(timer);
         }
     }, [lastTicket, state?.printerConfig.autoPrint]);
@@ -66,7 +79,7 @@ const KioskView: React.FC = () => {
 
     const { printerConfig } = state;
 
-    // تذكرة الطباعة - يتم حقنها خارج الـ root
+    // تذكرة الطباعة - يتم حقنها خارج الـ root لضمان نظافة الطباعة
     const PrintTicketPortal = () => {
         if (!lastTicket) return null;
         return ReactDOM.createPortal(
@@ -87,27 +100,14 @@ const KioskView: React.FC = () => {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[70vh] text-center relative">
-            {/* إعدادات الطباعة العالمية - حل جذري لظهور الورقة فارغة */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page { 
                         margin: 0; 
                         size: ${printerConfig.paperWidth === 'A4' ? 'A4' : printerConfig.paperWidth + ' auto'}; 
                     }
-                    
-                    /* إخفاء التطبيق بالكامل */
-                    #root {
-                        display: none !important;
-                    }
-
-                    body {
-                        background-color: white !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        visibility: hidden !important;
-                    }
-
-                    /* إظهار التذكرة فقط */
+                    #root { display: none !important; }
+                    body { background-color: white !important; margin: 0 !important; padding: 0 !important; visibility: hidden !important; }
                     #ticket-print-area {
                         visibility: visible !important;
                         display: block !important;
@@ -117,42 +117,35 @@ const KioskView: React.FC = () => {
                         width: 100% !important;
                         max-width: ${printerConfig.paperWidth === 'A4' ? '100%' : printerConfig.paperWidth} !important;
                         margin: 0 auto !important;
-                        padding: 8mm 4mm !important;
+                        padding: 5mm !important;
                         background: white !important;
                         color: #000000 !important;
                         text-align: center !important;
                         box-sizing: border-box !important;
                     }
-                    
-                    /* إجبار كافة النصوص على اللون الأسود الصريح */
                     #ticket-print-area * { 
                         visibility: visible !important;
                         color: #000000 !important; 
                         background: transparent !important;
                         font-family: 'Arial', sans-serif !important;
                     }
-
-                    .p-head { font-size: ${printerConfig.headerFontSize}px !important; font-weight: bold !important; margin-bottom: 4px !important; }
+                    .p-head { font-size: ${printerConfig.headerFontSize}px !important; font-weight: bold !important; margin-bottom: 2mm !important; }
                     .p-num { 
                         font-size: ${printerConfig.numberFontSize}px !important; 
                         font-weight: 900 !important; 
-                        margin: 12px 0 !important; 
-                        border-top: 2px solid #000000 !important; 
-                        border-bottom: 2px solid #000000 !important; 
-                        padding: 10px 0 !important;
+                        margin: 4mm 0 !important; 
+                        border-top: 1px solid #000000 !important; 
+                        border-bottom: 1px solid #000000 !important; 
+                        padding: 4mm 0 !important;
                         line-height: 1 !important;
                     }
                     .p-serv { font-size: ${printerConfig.detailsFontSize + 4}px !important; font-weight: bold !important; }
-                    .p-foot { font-size: ${printerConfig.detailsFontSize}px !important; margin-top: 8px !important; white-space: pre-wrap !important; line-height: 1.4 !important; }
-                    .p-date { font-size: ${printerConfig.detailsFontSize - 2}px !important; margin-top: 12px !important; border-top: 1px dashed #000000 !important; padding-top: 8px !important; }
+                    .p-foot { font-size: ${printerConfig.detailsFontSize}px !important; margin-top: 2mm !important; white-space: pre-wrap !important; }
+                    .p-date { font-size: ${printerConfig.detailsFontSize - 2}px !important; margin-top: 4mm !important; border-top: 0.5pt dashed #000000 !important; padding-top: 2mm !important; }
                 }
-
-                #ticket-print-area {
-                    display: none;
-                }
+                #ticket-print-area { display: none; }
             ` }} />
 
-            {/* زر إعدادات الطباعة السريع */}
             <div className="absolute top-0 left-0 p-4 no-print">
                 <button 
                     onClick={() => setIsSettingsOpen(true)}
@@ -186,30 +179,38 @@ const KioskView: React.FC = () => {
                 </>
             ) : (
                 <div className="bg-slate-800 p-12 rounded-[3.5rem] shadow-2xl border-2 border-sky-500/50 max-w-lg w-full animate-in zoom-in">
-                    <p className="text-xl text-slate-400 mb-2 font-medium">تم إصدار رقمك بنجاح</p>
-                    <h2 className="text-[10rem] font-sans font-black text-yellow-400 leading-none my-6 tracking-tighter">
-                        {lastTicket.ticketNumber}
-                    </h2>
-                    <div className="flex flex-col gap-4 mt-8">
-                        <Button 
-                            variant="primary" 
-                            className="w-full py-5 !rounded-2xl text-2xl font-black shadow-lg shadow-sky-500/20" 
-                            onClick={() => window.print()}
-                        >
-                            طـبـاعة الـتذكرة
-                        </Button>
-                        <Button 
-                            variant="secondary" 
-                            className="w-full py-5 !rounded-2xl text-xl font-bold opacity-60" 
-                            onClick={() => setLastTicket(null)}
-                        >
-                            العودة للرئيسية
-                        </Button>
-                    </div>
+                    {isPrinting ? (
+                        <div className="py-20">
+                            <div className="w-16 h-16 border-4 border-sky-500/20 border-t-sky-500 rounded-full animate-spin mx-auto mb-6"></div>
+                            <p className="text-2xl font-bold text-white">جاري الطباعة والعودة...</p>
+                        </div>
+                    ) : (
+                        <>
+                            <p className="text-xl text-slate-400 mb-2 font-medium">تم إصدار رقمك بنجاح</p>
+                            <h2 className="text-[10rem] font-sans font-black text-yellow-400 leading-none my-6 tracking-tighter">
+                                {lastTicket.ticketNumber}
+                            </h2>
+                            <div className="flex flex-col gap-4 mt-8">
+                                <Button 
+                                    variant="primary" 
+                                    className="w-full py-5 !rounded-2xl text-2xl font-black shadow-lg shadow-sky-500/20" 
+                                    onClick={handlePrintAndReset}
+                                >
+                                    طـبـاعة الـتذكرة
+                                </Button>
+                                <Button 
+                                    variant="secondary" 
+                                    className="w-full py-5 !rounded-2xl text-xl font-bold opacity-60" 
+                                    onClick={() => setLastTicket(null)}
+                                >
+                                    إغلاق
+                                </Button>
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
 
-            {/* مودال إعدادات الطباعة */}
             <Modal 
                 isOpen={isSettingsOpen} 
                 onClose={() => setIsSettingsOpen(false)} 
