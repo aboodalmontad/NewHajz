@@ -48,8 +48,8 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
         try {
             await action();
         } finally {
-            // نستخدم مهلة قصيرة جداً لمنع النقرات المتعددة مع الحفاظ على شعور السرعة
-            setTimeout(() => setLocalLoading(false), 300);
+            // مهلة زمنية قصيرة لمنع النقر المزدوج مع الحفاظ على سرعة الاستجابة
+            setTimeout(() => setLocalLoading(false), 200);
         }
     };
 
@@ -100,8 +100,8 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
                 )}
             </Card>
             
-            {/* تثبيت الارتفاع لـ 400px لمنع اهتزاز الشاشة عند تبديل المحتوى */}
-            <Card className="bg-slate-800 p-6 flex flex-col items-center justify-center min-h-[400px] border border-slate-700">
+            {/* تثبيت الارتفاع الأدنى (min-height) يمنع ارتجاج الشاشة عند التبديل بين الحالات */}
+            <Card className="bg-slate-800 p-6 flex flex-col items-center justify-center min-h-[420px] border border-slate-700">
                 {isServing && (
                      <div className="text-center w-full animate-in fade-in zoom-in duration-200">
                         <div className="mb-4">

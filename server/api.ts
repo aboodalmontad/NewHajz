@@ -55,7 +55,6 @@ const loadLocalState = (): QueueSystemState => {
         if (c.finishTime) c.finishTime = new Date(c.finishTime);
       });
       if (!parsed.printerConfig) parsed.printerConfig = DEFAULT_PRINTER_CONFIG;
-      if (!parsed.printerConfig.headerText) parsed.printerConfig.headerText = DEFAULT_PRINTER_CONFIG.headerText;
       return parsed;
     }
   } catch (e) {
@@ -98,12 +97,13 @@ const api = {
             if (c.callTime) c.callTime = new Date(c.callTime);
             if (c.finishTime) c.finishTime = new Date(c.finishTime);
           });
-          if (!remote.syncId) remote.syncId = local.syncId;
+          // التعزيز: التأكد من بقاء معرف المزامنة في الحالة المسترجعة
+          remote.syncId = local.syncId;
           saveLocalState(remote);
           return remote;
         }
       } catch (e) {
-        console.warn("Cloud sync failed, using local persistent data");
+        console.warn("Cloud sync failed, using persistent local state");
       }
     }
     return local;

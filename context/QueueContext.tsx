@@ -8,7 +8,7 @@ interface QueueContextType {
   state: QueueSystemState | null;
   isLoading: boolean;
   meshStatus: PeerStatus;
-  fetchState: () => Promise<void>;
+  fetchState: (showLoader?: boolean) => Promise<void>;
   addCustomer: (serviceName?: string) => Promise<Customer | undefined>;
   callNextCustomer: (employeeId: number) => Promise<void>;
   finishService: (employeeId: number) => Promise<void>;
@@ -57,7 +57,7 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     } catch (error) {
       console.error("Fetch State Error:", error);
     } finally {
-      setIsLoading(false);
+      if (showLoader) setIsLoading(false);
     }
   }, []);
 
@@ -111,16 +111,16 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return await peerRef.current.handleOffer(offer);
   };
 
-  // وظيفة محسنة لتنفيذ العمليات وتحديث الحالة فوراً
+  // وظيفة محسنة لتنفيذ العمليات وتحديث الحالة فوراً (Optimistic UI)
   const performAction = async (action: () => Promise<QueueSystemState | null>) => {
     try {
         const updatedState = await action();
         if (updatedState) {
-            setState({...updatedState}); // تحديث الحالة فوراً من البيانات المرتجعة
+            setState({...updatedState}); // تحديث الحالة فوراً بالبيانات الجديدة
         }
     } catch (e) {
       console.error("Action Call Error:", e);
-      await fetchState(); // في حال الفشل، نقوم بجلب الحالة الأصلية
+      await fetchState(); // استعادة الحالة في حال الخطأ
     }
   };
 
