@@ -3,6 +3,7 @@ import { QueueSystemState, Employee, Window, Customer, EmployeeStatus, CustomerS
 
 const STORAGE_KEY = 'smart_queue_system_state_v1';
 const ADMIN_PASSWORD_KEY = 'admin_password_config';
+const SYNC_ENDPOINT = 'https://jsonblob.com/api/jsonBlob';
 
 const DEFAULT_STATE: QueueSystemState = {
   windows: [
@@ -22,287 +23,219 @@ const DEFAULT_STATE: QueueSystemState = {
   ticketCounter: 100,
 };
 
-const loadState = (): QueueSystemState => {
+const loadLocalState = (): QueueSystemState => {
   try {
     const savedState = localStorage.getItem(STORAGE_KEY);
     if (savedState) {
       const parsed = JSON.parse(savedState);
-      if (!parsed || typeof parsed !== 'object') return DEFAULT_STATE;
-      
-      parsed.customers = Array.isArray(parsed.customers) ? parsed.customers : [];
-      parsed.employees = Array.isArray(parsed.employees) ? parsed.employees : DEFAULT_STATE.employees;
-      parsed.windows = Array.isArray(parsed.windows) ? parsed.windows : DEFAULT_STATE.windows;
-      parsed.queue = Array.isArray(parsed.queue) ? parsed.queue : [];
-      parsed.ticketCounter = typeof parsed.ticketCounter === 'number' ? parsed.ticketCounter : 100;
-
-      parsed.customers.forEach((c: any) => {
+      parsed.customers?.forEach((c: any) => {
         if (c.requestTime) c.requestTime = new Date(c.requestTime);
         if (c.callTime) c.callTime = new Date(c.callTime);
         if (c.finishTime) c.finishTime = new Date(c.finishTime);
       });
-      
-      return parsed as QueueSystemState;
+      return parsed;
     }
-  } catch (e) {
-    console.error("Failed to load state", e);
-  }
+  } catch (e) {}
   return DEFAULT_STATE;
 };
 
-const saveState = (state: QueueSystemState) => {
+const saveLocalState = (state: QueueSystemState) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+};
+
+const pushToCloud = async (state: QueueSystemState) => {
+  if (!state.syncId) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    await fetch(`${SYNC_ENDPOINT}/${state.syncId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state)
+    });
   } catch (e) {
-    console.error("Failed to save state", e);
+    console.error("Cloud push failed", e);
   }
 };
 
-let state: QueueSystemState = loadState();
-
-const NETWORK_DELAY = 50; 
-
 const api = {
-  getState: (): Promise<QueueSystemState> => {
-    return new Promise(resolve => {
-      state = loadState();
-      setTimeout(() => resolve(JSON.parse(JSON.stringify(state))), NETWORK_DELAY);
-    });
+  getState: async (): Promise<QueueSystemState> => {
+    let local = loadLocalState();
+    if (local.syncId) {
+      try {
+        const response = await fetch(`${SYNC_ENDPOINT}/${local.syncId}`);
+        if (response.ok) {
+          const remote = await response.json();
+          remote.customers?.forEach((c: any) => {
+            if (c.requestTime) c.requestTime = new Date(c.requestTime);
+            if (c.callTime) c.callTime = new Date(c.callTime);
+            if (c.finishTime) c.finishTime = new Date(c.finishTime);
+          });
+          saveLocalState(remote);
+          return remote;
+        }
+      } catch (e) {}
+    }
+    return local;
   },
 
-  authenticateEmployee: (username: string, password: string): Promise<Employee | undefined> => {
-    state = loadState();
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const employee = state.employees.find(e => e.username.toLowerCase() === username.toLowerCase() && e.password === password);
-        resolve(employee ? { ...employee } : undefined);
-      }, NETWORK_DELAY);
-    });
+  createSyncSession: async (): Promise<string> => {
+    const currentState = loadLocalState();
+    try {
+      const response = await fetch(SYNC_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentState)
+      });
+      const location = response.headers.get('Location');
+      const syncId = location?.split('/').pop() || '';
+      if (syncId) {
+        currentState.syncId = syncId;
+        saveLocalState(currentState);
+        return syncId;
+      }
+    } catch (e) {}
+    return '';
   },
 
-  authenticateAdmin: (password: string): Promise<boolean> => {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        // كلمة مرور المدير الافتراضية هي admin123
-        const savedAdminPass = localStorage.getItem(ADMIN_PASSWORD_KEY) || 'admin123';
-        resolve(password === savedAdminPass);
-      }, NETWORK_DELAY);
-    });
+  joinSyncSession: async (syncId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${SYNC_ENDPOINT}/${syncId}`);
+      if (response.ok) {
+        const remote = await response.json();
+        remote.syncId = syncId;
+        saveLocalState(remote);
+        return true;
+      }
+    } catch (e) {}
+    return false;
   },
 
-  updateAdminPassword: (newPassword: string): Promise<void> => {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        localStorage.setItem(ADMIN_PASSWORD_KEY, newPassword);
-        resolve();
-      }, NETWORK_DELAY);
-    });
+  authenticateEmployee: async (username: string, password: string): Promise<Employee | undefined> => {
+    const state = await api.getState();
+    return state.employees.find(e => e.username.toLowerCase() === username.toLowerCase() && e.password === password);
   },
 
-  addCustomer: (serviceName?: string): Promise<Customer> => {
-    state = loadState();
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const newCustomer: Customer = {
-          id: Date.now(),
-          ticketNumber: `ر-${state.ticketCounter}`,
-          requestTime: new Date(),
-          status: CustomerStatus.Waiting,
-          serviceName: serviceName || 'خدمات عامة'
-        };
-        state.ticketCounter++;
-        state.customers.push(newCustomer);
-        state.queue.push(newCustomer.id);
-        
-        saveState(state);
-        resolve({ ...newCustomer });
-      }, NETWORK_DELAY);
-    });
+  authenticateAdmin: async (password: string): Promise<boolean> => {
+    const savedAdminPass = localStorage.getItem(ADMIN_PASSWORD_KEY) || 'admin123';
+    return password === savedAdminPass;
+  },
+
+  updateAdminPassword: async (newPassword: string): Promise<void> => {
+    localStorage.setItem(ADMIN_PASSWORD_KEY, newPassword);
+  },
+
+  addCustomer: async (serviceName?: string): Promise<Customer> => {
+    const state = await api.getState();
+    const newCustomer: Customer = {
+      id: Date.now(),
+      ticketNumber: `ر-${state.ticketCounter}`,
+      requestTime: new Date(),
+      status: CustomerStatus.Waiting,
+      serviceName: serviceName || 'خدمات عامة'
+    };
+    state.ticketCounter++;
+    state.customers.push(newCustomer);
+    state.queue.push(newCustomer.id);
+    saveLocalState(state);
+    await pushToCloud(state);
+    return newCustomer;
   },
   
-  callNextCustomer: (employeeId: number): Promise<boolean> => {
-      state = loadState();
-      return new Promise((resolve) => {
-          setTimeout(() => {
-              if (state.queue.length === 0) return resolve(false);
+  callNextCustomer: async (employeeId: number): Promise<boolean> => {
+      const state = await api.getState();
+      const employee = state.employees.find(e => e.id === employeeId);
+      if (!employee || employee.status === EmployeeStatus.Busy || !employee.windowId) return false;
+      const window = state.windows.find(w => w.id === employee.windowId);
+      if (!window) return false;
 
-              const employee = state.employees.find(e => e.id === employeeId);
-              if (!employee || employee.status === EmployeeStatus.Busy || !employee.windowId) return resolve(false);
+      const windowTask = window.customTask || 'خدمات عامة';
+      let queueIndex = windowTask !== 'خدمات عامة' 
+          ? state.queue.findIndex(id => state.customers.find(c => c.id === id)?.serviceName === windowTask)
+          : 0;
 
-              const window = state.windows.find(w => w.id === employee.windowId);
-              if (!window) return resolve(false);
+      if (queueIndex === -1) return false;
 
-              const windowTask = window.customTask || 'خدمات عامة';
-              let nextCustomerId: number | undefined;
-              let queueIndex = -1;
-
-              // البحث عن عملاء يطابقون تخصص الشباك
-              if (windowTask !== 'خدمات عامة') {
-                  queueIndex = state.queue.findIndex(id => {
-                      const cust = state.customers.find(c => c.id === id);
-                      return cust?.serviceName === windowTask;
-                  });
-              } else {
-                  // إذا كان خدمات عامة، نأخذ أول واحد في الطابور أياً كان نوع خدمته
-                  queueIndex = 0;
-              }
-
-              // إذا لم يتم العثور على أي شخص يطابق التخصص (في حال كان الشباك متخصصاً)
-              if (queueIndex === -1) {
-                  return resolve(false);
-              }
-
-              nextCustomerId = state.queue.splice(queueIndex, 1)[0];
-              
-              state.customers = state.customers.map(c => 
-                  c.id === nextCustomerId ? { ...c, status: CustomerStatus.Serving, callTime: new Date(), servedBy: employeeId, windowId: employee.windowId } : c
-              );
-
-              state.employees = state.employees.map(e => 
-                  e.id === employeeId ? { ...e, status: EmployeeStatus.Busy } : e
-              );
-
-              state.windows = state.windows.map(w =>
-                  w.id === employee.windowId ? { ...w, currentCustomerId: nextCustomerId } : w
-              );
-
-              saveState(state);
-              resolve(true);
-          }, NETWORK_DELAY);
-      });
+      const nextId = state.queue.splice(queueIndex, 1)[0];
+      state.customers = state.customers.map(c => c.id === nextId ? { ...c, status: CustomerStatus.Serving, callTime: new Date(), servedBy: employeeId, windowId: employee.windowId } : c);
+      state.employees = state.employees.map(e => e.id === employeeId ? { ...e, status: EmployeeStatus.Busy } : e);
+      state.windows = state.windows.map(w => w.id === employee.windowId ? { ...w, currentCustomerId: nextId } : w);
+      
+      saveLocalState(state);
+      await pushToCloud(state);
+      return true;
   },
 
-  finishService: (employeeId: number): Promise<boolean> => {
-      state = loadState();
-      return new Promise(resolve => {
-          setTimeout(() => {
-              const employee = state.employees.find(e => e.id === employeeId);
-              if (!employee || !employee.windowId) return resolve(false);
+  finishService: async (employeeId: number): Promise<boolean> => {
+      const state = await api.getState();
+      const employee = state.employees.find(e => e.id === employeeId);
+      if (!employee || !employee.windowId) return false;
+      const window = state.windows.find(w => w.id === employee.windowId);
+      if (!window || !window.currentCustomerId) return false;
 
-              const window = state.windows.find(w => w.id === employee.windowId);
-              if (!window || !window.currentCustomerId) return resolve(false);
+      const customerId = window.currentCustomerId;
+      state.customers = state.customers.map(c => c.id === customerId ? { ...c, status: CustomerStatus.Served, finishTime: new Date() } : c);
+      state.employees = state.employees.map(e => e.id === employeeId ? { ...e, status: EmployeeStatus.Available, customersServed: e.customersServed + 1 } : e);
+      state.windows = state.windows.map(w => w.id === employee.windowId ? { ...w, currentCustomerId: undefined } : w);
 
-              const customerId = window.currentCustomerId;
-
-              state.customers = state.customers.map(c =>
-                  c.id === customerId ? { ...c, status: CustomerStatus.Served, finishTime: new Date() } : c
-              );
-              
-              state.employees = state.employees.map(e => 
-                  e.id === employeeId ? { ...e, status: EmployeeStatus.Available, customersServed: e.customersServed + 1 } : e
-              );
-
-              state.windows = state.windows.map(w => 
-                  w.id === employee.windowId ? { ...w, currentCustomerId: undefined } : w
-              );
-
-              saveState(state);
-              resolve(true);
-          }, NETWORK_DELAY);
-      });
+      saveLocalState(state);
+      await pushToCloud(state);
+      return true;
   },
 
-  assignEmployeeToWindow: (employeeId: number, windowId: number): Promise<void> => {
-      state = loadState();
-      return new Promise(resolve => {
-          setTimeout(() => {
-              state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
-              const targetWindow = state.windows.find(w => w.id === windowId);
-              if (targetWindow && targetWindow.employeeId) {
-                  state.employees = state.employees.map(e => e.id === targetWindow.employeeId ? {...e, windowId: undefined} : e);
-              }
-              state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: windowId } : e);
-              state.windows = state.windows.map(w => w.id === windowId ? { ...w, employeeId: employeeId } : w);
-              saveState(state);
-              resolve();
-          }, NETWORK_DELAY);
-      });
+  assignEmployeeToWindow: async (employeeId: number, windowId: number): Promise<void> => {
+      const state = await api.getState();
+      state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
+      state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: windowId } : e);
+      state.windows = state.windows.map(w => w.id === windowId ? { ...w, employeeId: employeeId } : w);
+      saveLocalState(state);
+      await pushToCloud(state);
   },
 
-  unassignEmployeeFromWindow: (employeeId: number): Promise<void> => {
-      state = loadState();
-      return new Promise(resolve => {
-          setTimeout(() => {
-              state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
-              state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: undefined } : e);
-              saveState(state);
-              resolve();
-          }, NETWORK_DELAY);
-      });
+  unassignEmployeeFromWindow: async (employeeId: number): Promise<void> => {
+      const state = await api.getState();
+      state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
+      state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: undefined } : e);
+      saveLocalState(state);
+      await pushToCloud(state);
   },
   
-  addEmployee: (name: string, username: string, password: string): Promise<Employee> => {
-    state = loadState();
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const newEmployee: Employee = {
-          id: Date.now(),
-          name, username, password,
-          status: EmployeeStatus.Available,
-          customersServed: 0,
-        };
-        state.employees.push(newEmployee);
-        saveState(state);
-        resolve({ ...newEmployee });
-      }, NETWORK_DELAY);
-    });
+  addEmployee: async (name: string, username: string, password: string): Promise<Employee> => {
+    const state = await api.getState();
+    const newEmp: Employee = { id: Date.now(), name, username, password, status: EmployeeStatus.Available, customersServed: 0 };
+    state.employees.push(newEmp);
+    saveLocalState(state);
+    await pushToCloud(state);
+    return newEmp;
   },
 
-  removeEmployee: (id: number): Promise<void> => {
-    state = loadState();
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const employee = state.employees.find(e => e.id === id);
-        if (employee && employee.windowId) {
-            state.windows = state.windows.map(w => w.id === employee.windowId ? {...w, employeeId: undefined} : w);
-        }
-        state.employees = state.employees.filter(e => e.id !== id);
-        saveState(state);
-        resolve();
-      }, NETWORK_DELAY);
-    });
+  removeEmployee: async (id: number): Promise<void> => {
+    const state = await api.getState();
+    state.employees = state.employees.filter(e => e.id !== id);
+    saveLocalState(state);
+    await pushToCloud(state);
   },
 
-  addWindow: (name: string, customTask?: string): Promise<Window> => {
-    state = loadState();
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const newWindow: Window = {
-          id: Date.now(),
-          name,
-          customTask: customTask || undefined,
-        };
-        state.windows.push(newWindow);
-        saveState(state);
-        resolve({ ...newWindow });
-      }, NETWORK_DELAY);
-    });
+  addWindow: async (name: string, customTask?: string): Promise<Window> => {
+    const state = await api.getState();
+    const newWin: Window = { id: Date.now(), name, customTask };
+    state.windows.push(newWin);
+    saveLocalState(state);
+    await pushToCloud(state);
+    return newWin;
   },
 
-  removeWindow: (id: number): Promise<void> => {
-    state = loadState();
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const window = state.windows.find(w => w.id === id);
-        if (window && window.employeeId) {
-            state.employees = state.employees.map(e => e.id === window.employeeId ? {...e, windowId: undefined} : e);
-        }
-        state.windows = state.windows.filter(w => w.id !== id);
-        saveState(state);
-        resolve();
-      }, NETWORK_DELAY);
-    });
+  removeWindow: async (id: number): Promise<void> => {
+    const state = await api.getState();
+    state.windows = state.windows.filter(w => w.id !== id);
+    saveLocalState(state);
+    await pushToCloud(state);
   },
 
-  updateWindowTask: (id: number, task: string): Promise<void> => {
-    state = loadState();
-    return new Promise(resolve => {
-      setTimeout(() => {
-        state.windows = state.windows.map(w => w.id === id ? {...w, customTask: task} : w);
-        saveState(state);
-        resolve();
-      }, NETWORK_DELAY);
-    });
-  },
+  updateWindowTask: async (id: number, task: string): Promise<void> => {
+    const state = await api.getState();
+    state.windows = state.windows.map(w => w.id === id ? {...w, customTask: task} : w);
+    saveLocalState(state);
+    await pushToCloud(state);
+  }
 };
 
 export default api;

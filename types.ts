@@ -46,4 +46,12 @@ export interface QueueSystemState {
   employees: Employee[];
   windows: Window[];
   ticketCounter: number;
+  syncId?: string;
 }
+
+// أنواع الرسائل المتبادلة في الشبكة المحلية
+export type MeshMessage = 
+  | { type: 'STATE_UPDATE', state: QueueSystemState }
+  | { type: 'ACTION_ADD_CUSTOMER', serviceName?: string }
+  | { type: 'ACTION_CALL_NEXT', employeeId: number }
+  | { type: 'ACTION_FINISH', employeeId: number };
