@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { EmployeeStatus, CustomerStatus } from '../types';
 import { Button } from './shared/Button';
@@ -31,16 +31,6 @@ const AdminDashboard: React.FC = () => {
     const [answerToken, setAnswerToken] = useState('');
     const [cloudSyncId, setCloudSyncId] = useState('');
 
-    // مراقبة حالة الربط المحلي لإعطاء تنبيهات للمستخدم
-    useEffect(() => {
-        if (meshStatus === 'connected') {
-            alert("✅ تم الربط المحلي بنجاح! الأجهزة الآن متصلة.");
-            setSyncMode('none');
-        } else if (meshStatus === 'failed') {
-            alert("❌ فشل الربط المحلي. يرجى التأكد من الكود والمحاولة مرة أخرى.");
-        }
-    }, [meshStatus]);
-
     const handleEnableCloud = async () => {
         const id = await enableCloudSync();
         setCloudSyncId(id);
@@ -49,16 +39,6 @@ const AdminDashboard: React.FC = () => {
     const handleStartLocalHost = async () => {
         const token = await startMeshHost();
         setOfferToken(token);
-    };
-
-    const handleActivateLocal = async () => {
-        if (!answerToken) return;
-        try {
-            await completeMeshHost(answerToken);
-            // التغذية الراجعة ستتم عبر useEffect أعلاه
-        } catch (e) {
-            alert("خطأ في معالجة الكود");
-        }
     };
 
     const copyToClipboard = (text: string) => {
@@ -74,8 +54,8 @@ const AdminDashboard: React.FC = () => {
                 <div>
                     <h2 className="text-4xl font-extrabold text-white tracking-tight">لوحة الإدارة</h2>
                     <p className="text-slate-400 mt-2 flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${state.syncId || meshStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-slate-500'}`}></span>
-                        {state.syncId ? `مزامنة سحابية نشطة: ${state.syncId}` : meshStatus === 'connected' ? 'ربط محلي نشط ✅' : 'وضع العمل المنفرد'}
+                        <span className={`w-2 h-2 rounded-full ${state.syncId || meshStatus === 'connected' ? 'bg-green-500' : 'bg-slate-500'}`}></span>
+                        {state.syncId ? `مزامنة سحابية نشطة: ${state.syncId}` : meshStatus === 'connected' ? 'ربط محلي نشط' : 'وضع العمل المنفرد'}
                     </p>
                 </div>
                 <div className="flex bg-slate-800 p-1.5 rounded-2xl border border-slate-700 shadow-inner overflow-x-auto max-w-full">
@@ -160,7 +140,7 @@ const AdminDashboard: React.FC = () => {
                                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
                             </div>
                             <h4 className="text-2xl font-bold text-white mb-2">المزامنة السحابية</h4>
-                            <p className="text-slate-400 text-sm leading-relaxed mb-6">الأفضل لربط الأجهزة البعيدة. ميزة "الربط لمرة واحدة" تعمل تلقائياً مع هذا الوضع.</p>
+                            <p className="text-slate-400 text-sm leading-relaxed mb-6">الأفضل لربط الأجهزة البعيدة أو عبر الإنترنت. سهلة الإعداد باستخدام كود قصير.</p>
                             
                             {syncMode === 'cloud' && (
                                 <div className="space-y-4 animate-in fade-in">
@@ -184,7 +164,7 @@ const AdminDashboard: React.FC = () => {
                                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>
                             </div>
                             <h4 className="text-2xl font-bold text-white mb-2">الربط المحلي (LAN)</h4>
-                            <p className="text-slate-400 text-sm leading-relaxed mb-6">سريعة جداً وتعمل بدون إنترنت. (يجب تكرار الربط عند إعادة التشغيل في هذا الوضع فقط).</p>
+                            <p className="text-slate-400 text-sm leading-relaxed mb-6">الأفضل داخل نفس المبنى. سريعة جداً وتعمل حتى بدون إنترنت، تعتمد على ربط الأجهزة ببعضها مباشرة.</p>
                             
                             {syncMode === 'local' && (
                                 <div className="space-y-4 animate-in fade-in">
@@ -202,13 +182,7 @@ const AdminDashboard: React.FC = () => {
                                             <div className="p-3 bg-slate-900 rounded-lg border border-slate-700">
                                                 <label className="text-[10px] text-slate-400 block mb-1">الصق كود الرد هنا:</label>
                                                 <textarea value={answerToken} onChange={(e) => setAnswerToken(e.target.value)} className="w-full h-20 bg-transparent text-[8px] text-white font-mono outline-none focus:ring-1 focus:ring-green-500" placeholder="الصق كود الرد..." />
-                                                <Button 
-                                                    className="w-full mt-2 !py-2 !text-xs" 
-                                                    onClick={handleActivateLocal} 
-                                                    disabled={!answerToken || meshStatus === 'connecting'}
-                                                >
-                                                    {meshStatus === 'connecting' ? 'جاري التفعيل...' : 'تفعيل الربط المحلي'}
-                                                </Button>
+                                                <Button className="w-full mt-2 !py-2 !text-xs" onClick={() => completeMeshHost(answerToken)} disabled={!answerToken}>تفعيل الربط المحلي</Button>
                                             </div>
                                         </div>
                                     )}
