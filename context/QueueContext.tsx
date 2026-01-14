@@ -8,7 +8,7 @@ interface QueueContextType {
   state: QueueSystemState | null;
   isLoading: boolean;
   meshStatus: PeerStatus;
-  fetchState: () => Promise<void>;
+  fetchState: (showLoader?: boolean) => Promise<void>;
   addCustomer: (serviceName?: string) => Promise<Customer | undefined>;
   callNextCustomer: (employeeId: number) => Promise<void>;
   finishService: (employeeId: number) => Promise<void>;
@@ -27,6 +27,7 @@ interface QueueContextType {
   // Cloud Sync Methods
   enableCloudSync: () => Promise<string>;
   joinCloudSync: (syncId: string) => Promise<boolean>;
+  disconnectSync: () => Promise<void>;
   
   // Local Mesh Methods
   startMeshHost: () => Promise<string>;
@@ -48,26 +49,27 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [meshStatus, setMeshStatus] = useState<PeerStatus>('idle');
   const peerRef = useRef<PeerManager | null>(null);
 
-  const fetchState = useCallback(async () => {
+  const fetchState = useCallback(async (showLoader = false) => {
+    if (showLoader) setIsLoading(true);
     try {
       const serverState = await api.getState();
       setState(serverState);
     } catch (error) {
       console.error("Fetch State Error:", error);
     } finally {
-      setIsLoading(false);
+      if (showLoader) setIsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    fetchState(true);
+  }, [fetchState]);
 
   useEffect(() => {
     if (state && meshStatus === 'connected' && peerRef.current) {
       peerRef.current.send({ type: 'STATE_UPDATE', state });
     }
   }, [state, meshStatus]);
-
-  useEffect(() => {
-    fetchState();
-  }, [fetchState]);
 
   const handleMeshMessage = (msg: MeshMessage) => {
     if (msg.type === 'STATE_UPDATE') {
@@ -76,40 +78,15 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const enableCloudSync = async () => {
-    const id = await api.createSyncSession();
-    await fetchState();
-    return id;
-  };
-
-  const joinCloudSync = async (syncId: string) => {
-    const success = await api.joinSyncSession(syncId);
-    if (success) await fetchState();
-    return success;
-  };
-
-  const startMeshHost = async () => {
-    if (peerRef.current) peerRef.current.close();
-    peerRef.current = new PeerManager(handleMeshMessage, setMeshStatus);
-    return await peerRef.current.createOffer();
-  };
-
-  const completeMeshHost = async (answer: string) => {
-    if (peerRef.current) await peerRef.current.handleAnswer(answer);
-  };
-
-  const joinMeshClient = async (offer: string) => {
-    if (peerRef.current) peerRef.current.close();
-    peerRef.current = new PeerManager(handleMeshMessage, setMeshStatus);
-    return await peerRef.current.handleOffer(offer);
-  };
-
-  const performApiCall = async (apiFunc: () => Promise<any>) => {
+  const performAction = async (action: () => Promise<QueueSystemState | null>) => {
     try {
-        await apiFunc();
-        await fetchState();
+        const updatedState = await action();
+        if (updatedState) {
+            setState({ ...updatedState }); // تحديث فوري بدون فليكر
+        }
     } catch (e) {
-      console.error("API Call Error:", e);
+      console.error("Action Call Error:", e);
+      await fetchState(); // استعادة في حال الخطأ
     }
   };
 
@@ -120,21 +97,48 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         await fetchState();
         return c;
     },
-    callNextCustomer: (id: number) => performApiCall(() => api.callNextCustomer(id)),
-    finishService: (id: number) => performApiCall(() => api.finishService(id)),
-    assignEmployeeToWindow: (eid: number, wid: number) => performApiCall(() => api.assignEmployeeToWindow(eid, wid)),
-    unassignEmployeeFromWindow: (id: number) => performApiCall(() => api.unassignEmployeeFromWindow(id)),
-    addEmployee: (n: string, u: string, p: string) => performApiCall(() => api.addEmployee(n, u, p)),
-    removeEmployee: (id: number) => performApiCall(() => api.removeEmployee(id)),
-    addWindow: (n: string, t?: string) => performApiCall(() => api.addWindow(n, t)),
-    removeWindow: (id: number) => performApiCall(() => api.removeWindow(id)),
-    updateWindowTask: (id: number, t: string) => performApiCall(() => api.updateWindowTask(id, t)),
+    callNextCustomer: (id: number) => performAction(() => api.callNextCustomer(id)),
+    finishService: (id: number) => performAction(() => api.finishService(id)),
+    assignEmployeeToWindow: (eid: number, wid: number) => performAction(() => api.assignEmployeeToWindow(eid, wid)),
+    unassignEmployeeFromWindow: (id: number) => performAction(() => api.unassignEmployeeFromWindow(id)),
+    addEmployee: async (n: string, u: string, p: string) => { await api.addEmployee(n, u, p); await fetchState(); },
+    removeEmployee: async (id: number) => { await api.removeEmployee(id); await fetchState(); },
+    addWindow: async (n: string, t?: string) => { await api.addWindow(n, t); await fetchState(); },
+    removeWindow: async (id: number) => { await api.removeWindow(id); await fetchState(); },
+    updateWindowTask: async (id: number, t: string) => { await api.updateWindowTask(id, t); await fetchState(); },
     authenticateEmployee: api.authenticateEmployee,
     authenticateAdmin: api.authenticateAdmin,
     updateAdminPassword: api.updateAdminPassword,
-    updatePrinterConfig: (c: PrinterConfig) => performApiCall(() => api.updatePrinterConfig(c)),
-    enableCloudSync, joinCloudSync,
-    startMeshHost, completeMeshHost, joinMeshClient
+    updatePrinterConfig: async (c: PrinterConfig) => { await api.updatePrinterConfig(c); await fetchState(); },
+    
+    enableCloudSync: async () => {
+        const id = await api.createSyncSession();
+        await fetchState();
+        return id;
+    },
+    joinCloudSync: async (id: string) => {
+        const ok = await api.joinSyncSession(id);
+        if (ok) await fetchState();
+        return ok;
+    },
+    disconnectSync: async () => {
+        await api.disconnectSync();
+        await fetchState();
+    },
+    
+    startMeshHost: async () => {
+        if (peerRef.current) peerRef.current.close();
+        peerRef.current = new PeerManager(handleMeshMessage, setMeshStatus);
+        return await peerRef.current.createOffer();
+    },
+    completeMeshHost: async (ans: string) => {
+        if (peerRef.current) await peerRef.current.handleAnswer(ans);
+    },
+    joinMeshClient: async (off: string) => {
+        if (peerRef.current) peerRef.current.close();
+        peerRef.current = new PeerManager(handleMeshMessage, setMeshStatus);
+        return await peerRef.current.handleOffer(off);
+    }
   };
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;
