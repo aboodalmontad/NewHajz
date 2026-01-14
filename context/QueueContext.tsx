@@ -62,14 +62,14 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   useEffect(() => {
+    fetchState(true);
+  }, [fetchState]);
+
+  useEffect(() => {
     if (state && meshStatus === 'connected' && peerRef.current) {
       peerRef.current.send({ type: 'STATE_UPDATE', state });
     }
   }, [state, meshStatus]);
-
-  useEffect(() => {
-    fetchState(true);
-  }, [fetchState]);
 
   const handleMeshMessage = (msg: MeshMessage) => {
     if (msg.type === 'STATE_UPDATE') {
@@ -78,49 +78,16 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const enableCloudSync = async () => {
-    const id = await api.createSyncSession();
-    await fetchState();
-    return id;
-  };
-
-  const joinCloudSync = async (syncId: string) => {
-    const success = await api.joinSyncSession(syncId);
-    if (success) await fetchState();
-    return success;
-  };
-
-  const disconnectSync = async () => {
-    await api.disconnectSync();
-    await fetchState();
-  };
-
-  const startMeshHost = async () => {
-    if (peerRef.current) peerRef.current.close();
-    peerRef.current = new PeerManager(handleMeshMessage, setMeshStatus);
-    return await peerRef.current.createOffer();
-  };
-
-  const completeMeshHost = async (answer: string) => {
-    if (peerRef.current) await peerRef.current.handleAnswer(answer);
-  };
-
-  const joinMeshClient = async (offer: string) => {
-    if (peerRef.current) peerRef.current.close();
-    peerRef.current = new PeerManager(handleMeshMessage, setMeshStatus);
-    return await peerRef.current.handleOffer(offer);
-  };
-
-  // وظيفة محسنة لتنفيذ العمليات وتحديث الحالة فوراً (Optimistic UI)
+  // وظيفة محسنة للتحديث اللحظي (Optimistic UI)
   const performAction = async (action: () => Promise<QueueSystemState | null>) => {
     try {
         const updatedState = await action();
         if (updatedState) {
-            setState({...updatedState}); // تحديث الحالة فوراً بالبيانات الجديدة
+            setState({ ...updatedState }); // تحديث الحالة فوراً من البيانات المرجعة
         }
     } catch (e) {
       console.error("Action Call Error:", e);
-      await fetchState(); // استعادة الحالة في حال الخطأ
+      await fetchState(); // استعادة الحالة الأصلية في حال فشل العملية
     }
   };
 
@@ -144,8 +111,35 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     authenticateAdmin: api.authenticateAdmin,
     updateAdminPassword: api.updateAdminPassword,
     updatePrinterConfig: async (c: PrinterConfig) => { await api.updatePrinterConfig(c); await fetchState(); },
-    enableCloudSync, joinCloudSync, disconnectSync,
-    startMeshHost, completeMeshHost, joinMeshClient
+    
+    enableCloudSync: async () => {
+        const id = await api.createSyncSession();
+        await fetchState();
+        return id;
+    },
+    joinCloudSync: async (id: string) => {
+        const ok = await api.joinSyncSession(id);
+        if (ok) await fetchState();
+        return ok;
+    },
+    disconnectSync: async () => {
+        await api.disconnectSync();
+        await fetchState();
+    },
+    
+    startMeshHost: async () => {
+        if (peerRef.current) peerRef.current.close();
+        peerRef.current = new PeerManager(handleMeshMessage, setMeshStatus);
+        return await peerRef.current.createOffer();
+    },
+    completeMeshHost: async (ans: string) => {
+        if (peerRef.current) await peerRef.current.handleAnswer(ans);
+    },
+    joinMeshClient: async (off: string) => {
+        if (peerRef.current) peerRef.current.close();
+        peerRef.current = new PeerManager(handleMeshMessage, setMeshStatus);
+        return await peerRef.current.handleOffer(off);
+    }
   };
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;
