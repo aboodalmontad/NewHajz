@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { useQueueSystem } from '../context/QueueContext';
 import { Customer } from '../types';
 import { Button } from './shared/Button';
@@ -24,7 +25,7 @@ const KioskView: React.FC = () => {
         if (lastTicket && state?.printerConfig.autoPrint) {
             const timer = setTimeout(() => {
                 window.print();
-            }, 300);
+            }, 500);
             return () => clearTimeout(timer);
         }
     }, [lastTicket, state?.printerConfig.autoPrint]);
@@ -39,7 +40,6 @@ const KioskView: React.FC = () => {
             if (task.includes('حساب')) icon = <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
             if (task.includes('استقبال')) icon = <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>;
             if (task.includes('عملاء')) icon = <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" /></svg>;
-            if (task.includes('صراف') || task.includes('مالية')) icon = <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
             return { name: task, icon };
         });
     }, [state]);
@@ -63,9 +63,28 @@ const KioskView: React.FC = () => {
 
     const { printerConfig } = state;
 
+    // المكون الخاص بالتذكرة التي ستظهر في الطباعة فقط
+    const PrintTicket = () => {
+        if (!lastTicket) return null;
+        return ReactDOM.createPortal(
+            <div id="ticket-print-area">
+                <div className="p-head">نظام الطابور الذكي</div>
+                <div className="p-serv">{lastTicket.serviceName}</div>
+                <div className="p-num">{lastTicket.ticketNumber}</div>
+                <div className="p-foot">{printerConfig.footerText}</div>
+                {printerConfig.showDate && (
+                    <div className="p-date">
+                        {new Date(lastTicket.requestTime).toLocaleTimeString('ar-EG')} - {new Date(lastTicket.requestTime).toLocaleDateString('ar-EG')}
+                    </div>
+                )}
+            </div>,
+            document.body
+        );
+    };
+
     return (
-        <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
-            {/* استراتيجية الطباعة الموثوقة - فرض اللون الأسود الصريح ومنع تداخل الثيم الداكن */}
+        <div className="flex flex-col items-center justify-center min-h-[70vh] text-center relative">
+            {/* إعدادات الطباعة العالمية - فرض الأسود وإخفاء الـ root */}
             <style dangerouslySetInnerHTML={{ __html: `
                 @media print {
                     @page { 
@@ -73,88 +92,69 @@ const KioskView: React.FC = () => {
                         size: ${printerConfig.paperWidth === 'A4' ? 'A4' : printerConfig.paperWidth + ' auto'}; 
                     }
                     
-                    html, body {
-                        background-color: #ffffff !important;
-                        color: #000000 !important;
+                    /* إخفاء حاوية التطبيق بالكامل */
+                    #root {
+                        display: none !important;
+                    }
+
+                    body {
+                        background-color: white !important;
                         margin: 0 !important;
                         padding: 0 !important;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
                     }
 
-                    #root > *:not(#ticket-print-area) {
-                        display: none !important;
-                    }
-
-                    header, nav, footer, .no-print {
-                        display: none !important;
-                    }
-                    
+                    /* إظهار التذكرة التي هي الآن خارج root */
                     #ticket-print-area {
                         display: block !important;
                         visibility: visible !important;
-                        position: absolute !important;
-                        left: 0 !important;
-                        top: 0 !important;
                         width: 100% !important;
+                        max-width: ${printerConfig.paperWidth === 'A4' ? '100%' : printerConfig.paperWidth} !important;
                         margin: 0 auto !important;
                         padding: 10mm 5mm !important;
-                        background: #ffffff !important;
-                        color: #000000 !important;
+                        background: white !important;
+                        color: black !important;
                         text-align: center !important;
                         box-sizing: border-box !important;
-                        font-family: Arial, sans-serif !important;
+                        font-family: 'Arial', sans-serif !important;
                     }
                     
-                    #ticket-print-area div,
-                    #ticket-print-area p,
-                    #ticket-print-area span { 
-                        color: #000000 !important; 
+                    #ticket-print-area * { 
+                        color: black !important; 
                         background: transparent !important;
-                        visibility: visible !important;
-                        opacity: 1 !important;
+                        font-family: 'Arial', sans-serif !important;
+                        line-height: 1.2 !important;
                     }
 
-                    .p-head { font-size: ${printerConfig.headerFontSize}px !important; font-weight: bold !important; margin-bottom: 5px !important; line-height: 1.2 !important; }
+                    .p-head { font-size: ${printerConfig.headerFontSize}px !important; font-weight: bold !important; margin-bottom: 5px !important; }
                     .p-num { 
                         font-size: ${printerConfig.numberFontSize}px !important; 
                         font-weight: 900 !important; 
                         margin: 15px 0 !important; 
-                        border-top: 3px solid #000000 !important; 
-                        border-bottom: 3px solid #000000 !important; 
+                        border-top: 3px solid black !important; 
+                        border-bottom: 3px solid black !important; 
                         padding: 15px 0 !important;
                         line-height: 1 !important;
+                        display: block !important;
                     }
                     .p-serv { font-size: ${printerConfig.detailsFontSize + 4}px !important; font-weight: bold !important; }
-                    .p-foot { font-size: ${printerConfig.detailsFontSize}px !important; margin-top: 10px !important; line-height: 1.5 !important; }
+                    .p-foot { font-size: ${printerConfig.detailsFontSize}px !important; margin-top: 10px !important; white-space: pre-wrap !important; }
+                    .p-date { font-size: ${printerConfig.detailsFontSize - 2}px !important; margin-top: 15px !important; border-top: 1px dashed black !important; padding-top: 10px !important; }
                 }
 
+                /* إخفاء منطقة الطباعة عن الشاشة العادية */
                 #ticket-print-area {
                     display: none;
                 }
             ` }} />
 
-            <div id="ticket-print-area">
-                {lastTicket && (
-                    <>
-                        <div className="p-head">نظام الطابور الذكي</div>
-                        <div className="p-serv">{lastTicket.serviceName}</div>
-                        <div className="p-num">{lastTicket.ticketNumber}</div>
-                        <div className="p-foot">{printerConfig.footerText}</div>
-                        {printerConfig.showDate && (
-                            <div className="p-foot" style={{borderTop: '1px dashed black', marginTop: '15px', paddingTop: '10px', fontSize: '0.9em'}}>
-                                {new Date(lastTicket.requestTime).toLocaleTimeString('ar-EG')} - {new Date(lastTicket.requestTime).toLocaleDateString('ar-EG')}
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
+            {/* استدعاء التذكرة المخصصة للطباعة */}
+            <PrintTicket />
 
             {!lastTicket ? (
                 <>
                     <h1 className="text-6xl font-black text-white mb-6 tracking-tighter">مرحباً بك</h1>
                     <p className="text-2xl text-slate-400 mb-12">يرجى اختيار الخدمة للحصول على رقم دورك</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 w-full max-w-6xl px-4 text-right">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 w-full max-w-6xl px-4">
                         {dynamicServices.map(service => (
                             <ServiceOption 
                                 key={service.name} 
@@ -173,7 +173,7 @@ const KioskView: React.FC = () => {
                         {lastTicket.ticketNumber}
                     </h2>
                     <div className="flex flex-col gap-4 mt-8">
-                        <Button variant="primary" className="w-full py-5 !rounded-2xl text-2xl font-black" onClick={() => window.print()}>
+                        <Button variant="primary" className="w-full py-5 !rounded-2xl text-2xl font-black shadow-lg shadow-sky-500/20" onClick={() => window.print()}>
                             طـبـاعة الـتذكرة
                         </Button>
                         <Button variant="secondary" className="w-full py-5 !rounded-2xl text-xl font-bold opacity-60" onClick={() => setLastTicket(null)}>
