@@ -10,6 +10,16 @@ export enum CustomerStatus {
   Served = 'تمت خدمته',
 }
 
+export interface PrinterConfig {
+  paperWidth: '58mm' | '80mm' | 'A4';
+  headerFontSize: number;
+  numberFontSize: number;
+  detailsFontSize: number;
+  footerText: string;
+  showDate: boolean;
+  autoPrint: boolean;
+}
+
 export interface Customer {
   id: number;
   ticketNumber: string;
@@ -17,9 +27,9 @@ export interface Customer {
   callTime?: Date;
   finishTime?: Date;
   status: CustomerStatus;
-  servedBy?: number; // employeeId
+  servedBy?: number;
   windowId?: number;
-  serviceName?: string; // نوع الخدمة المختارة
+  serviceName?: string;
 }
 
 export interface Employee {
@@ -47,9 +57,9 @@ export interface QueueSystemState {
   windows: Window[];
   ticketCounter: number;
   syncId?: string;
+  printerConfig: PrinterConfig;
 }
 
-// أنواع الرسائل المتبادلة في الشبكة المحلية
 export type MeshMessage = 
   | { type: 'STATE_UPDATE', state: QueueSystemState }
   | { type: 'ACTION_ADD_CUSTOMER', serviceName?: string }

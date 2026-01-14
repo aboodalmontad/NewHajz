@@ -5,6 +5,7 @@ import { EmployeeStatus, CustomerStatus } from '../types';
 import { Button } from './shared/Button';
 import { Card } from './shared/Card';
 import { Modal } from './shared/Modal';
+import PrinterSettings from './PrinterSettings';
 
 const AdminDashboard: React.FC = () => {
     const { 
@@ -15,18 +16,16 @@ const AdminDashboard: React.FC = () => {
         enableCloudSync
     } = useQueueSystem();
     
-    const [activeTab, setActiveTab] = useState<'overview' | 'management' | 'sync'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'management' | 'sync' | 'printer'>('overview');
     const [isEmployeeModalOpen, setEmployeeModalOpen] = useState(false);
     const [isWindowModalOpen, setWindowModalOpen] = useState(false);
     
-    // Form states
     const [newEmpName, setNewEmpName] = useState('');
     const [newEmpUser, setNewEmpUser] = useState('');
     const [newEmpPass, setNewEmpPass] = useState('');
     const [newWinName, setNewWinName] = useState('');
     const [newWinTask, setNewWinTask] = useState('');
 
-    // Sync States
     const [syncMode, setSyncMode] = useState<'none' | 'cloud' | 'local'>('none');
     const [offerToken, setOfferToken] = useState('');
     const [answerToken, setAnswerToken] = useState('');
@@ -59,10 +58,11 @@ const AdminDashboard: React.FC = () => {
                         {state.syncId ? `مزامنة سحابية نشطة: ${state.syncId}` : meshStatus === 'connected' ? 'ربط محلي نشط' : 'وضع العمل المنفرد'}
                     </p>
                 </div>
-                <div className="flex bg-slate-800 p-1.5 rounded-2xl border border-slate-700 shadow-inner">
-                    <button onClick={() => setActiveTab('overview')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'overview' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>نظرة عامة</button>
-                    <button onClick={() => setActiveTab('management')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'management' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>إدارة النظام</button>
-                    <button onClick={() => setActiveTab('sync')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'sync' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>الربط والمزامنة</button>
+                <div className="flex bg-slate-800 p-1.5 rounded-2xl border border-slate-700 shadow-inner overflow-x-auto max-w-full">
+                    <button onClick={() => setActiveTab('overview')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'overview' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>نظرة عامة</button>
+                    <button onClick={() => setActiveTab('management')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'management' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>إدارة النظام</button>
+                    <button onClick={() => setActiveTab('printer')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'printer' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>إعدادات الطباعة</button>
+                    <button onClick={() => setActiveTab('sync')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'sync' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>الربط والمزامنة</button>
                 </div>
             </div>
 
@@ -79,9 +79,10 @@ const AdminDashboard: React.FC = () => {
                 </div>
             )}
 
+            {activeTab === 'printer' && <PrinterSettings />}
+
             {activeTab === 'management' && (
                 <div className="space-y-12 animate-in slide-in-from-bottom-4">
-                    {/* إدارة الموظفين */}
                     <section>
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-2xl font-bold text-white">إدارة الموظفين</h3>
@@ -102,7 +103,6 @@ const AdminDashboard: React.FC = () => {
                         </div>
                     </section>
 
-                    {/* إدارة الشبابيك */}
                     <section>
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-2xl font-bold text-white">إدارة الشبابيك</h3>
@@ -135,7 +135,6 @@ const AdminDashboard: React.FC = () => {
                     <h3 className="text-3xl font-bold text-white text-center mb-8">مركز الربط والمزامنة</h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* الخيار الأول: المزامنة السحابية */}
                         <Card className={`p-8 border-2 transition-all ${syncMode === 'cloud' ? 'border-sky-500 bg-slate-800' : 'border-slate-700 bg-slate-800/50 hover:border-slate-500'}`} onClick={() => setSyncMode('cloud')}>
                             <div className="bg-sky-500/10 w-16 h-16 rounded-3xl flex items-center justify-center text-sky-500 mb-6">
                                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
@@ -160,7 +159,6 @@ const AdminDashboard: React.FC = () => {
                             )}
                         </Card>
 
-                        {/* الخيار الثاني: المزامنة المحلية */}
                         <Card className={`p-8 border-2 transition-all ${syncMode === 'local' ? 'border-green-500 bg-slate-800' : 'border-slate-700 bg-slate-800/50 hover:border-slate-500'}`} onClick={() => setSyncMode('local')}>
                             <div className="bg-green-500/10 w-16 h-16 rounded-3xl flex items-center justify-center text-green-500 mb-6">
                                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>
@@ -195,7 +193,6 @@ const AdminDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* المودالات كما هي لضمان عدم اختفاء الوظائف */}
             <Modal isOpen={isEmployeeModalOpen} onClose={() => setEmployeeModalOpen(false)} title="إضافة موظف">
                 <div className="space-y-4 pt-4">
                     <input value={newEmpName} onChange={e => setNewEmpName(e.target.value)} placeholder="الاسم" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white"/>

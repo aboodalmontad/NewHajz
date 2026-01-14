@@ -1,9 +1,19 @@
 
-import { QueueSystemState, Employee, Window, Customer, EmployeeStatus, CustomerStatus } from '../types';
+import { QueueSystemState, Employee, Window, Customer, EmployeeStatus, CustomerStatus, PrinterConfig } from '../types';
 
 const STORAGE_KEY = 'smart_queue_system_state_v1';
 const ADMIN_PASSWORD_KEY = 'admin_password_config';
 const SYNC_ENDPOINT = 'https://jsonblob.com/api/jsonBlob';
+
+const DEFAULT_PRINTER_CONFIG: PrinterConfig = {
+  paperWidth: '80mm',
+  headerFontSize: 20,
+  numberFontSize: 70,
+  detailsFontSize: 14,
+  footerText: 'شكراً لزيارتكم',
+  showDate: true,
+  autoPrint: true
+};
 
 const DEFAULT_STATE: QueueSystemState = {
   windows: [
@@ -21,6 +31,7 @@ const DEFAULT_STATE: QueueSystemState = {
   customers: [],
   queue: [],
   ticketCounter: 100,
+  printerConfig: DEFAULT_PRINTER_CONFIG
 };
 
 const loadLocalState = (): QueueSystemState => {
@@ -33,14 +44,21 @@ const loadLocalState = (): QueueSystemState => {
         if (c.callTime) c.callTime = new Date(c.callTime);
         if (c.finishTime) c.finishTime = new Date(c.finishTime);
       });
+      if (!parsed.printerConfig) parsed.printerConfig = DEFAULT_PRINTER_CONFIG;
       return parsed;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn("Local state load failed", e);
+  }
   return DEFAULT_STATE;
 };
 
 const saveLocalState = (state: QueueSystemState) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error("Local save error:", e);
+  }
 };
 
 const pushToCloud = async (state: QueueSystemState) => {
@@ -50,9 +68,9 @@ const pushToCloud = async (state: QueueSystemState) => {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(state)
-    });
+    }).catch(e => console.error("Cloud fetch failed:", e));
   } catch (e) {
-    console.error("Cloud push failed", e);
+    console.error("Cloud push fatal error:", e);
   }
 };
 
@@ -69,10 +87,13 @@ const api = {
             if (c.callTime) c.callTime = new Date(c.callTime);
             if (c.finishTime) c.finishTime = new Date(c.finishTime);
           });
+          if (!remote.printerConfig) remote.printerConfig = DEFAULT_PRINTER_CONFIG;
           saveLocalState(remote);
           return remote;
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn("Cloud sync failed, using local data");
+      }
     }
     return local;
   },
@@ -92,7 +113,9 @@ const api = {
         saveLocalState(currentState);
         return syncId;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Session creation error:", e);
+    }
     return '';
   },
 
@@ -105,7 +128,9 @@ const api = {
         saveLocalState(remote);
         return true;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Join sync error:", e);
+    }
     return false;
   },
 
@@ -136,8 +161,15 @@ const api = {
     state.customers.push(newCustomer);
     state.queue.push(newCustomer.id);
     saveLocalState(state);
-    await pushToCloud(state);
+    pushToCloud(state);
     return newCustomer;
+  },
+
+  updatePrinterConfig: async (config: PrinterConfig): Promise<void> => {
+    const state = await api.getState();
+    state.printerConfig = config;
+    saveLocalState(state);
+    pushToCloud(state);
   },
   
   callNextCustomer: async (employeeId: number): Promise<boolean> => {
@@ -160,7 +192,7 @@ const api = {
       state.windows = state.windows.map(w => w.id === employee.windowId ? { ...w, currentCustomerId: nextId } : w);
       
       saveLocalState(state);
-      await pushToCloud(state);
+      pushToCloud(state);
       return true;
   },
 
@@ -177,7 +209,7 @@ const api = {
       state.windows = state.windows.map(w => w.id === employee.windowId ? { ...w, currentCustomerId: undefined } : w);
 
       saveLocalState(state);
-      await pushToCloud(state);
+      pushToCloud(state);
       return true;
   },
 
@@ -187,7 +219,7 @@ const api = {
       state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: windowId } : e);
       state.windows = state.windows.map(w => w.id === windowId ? { ...w, employeeId: employeeId } : w);
       saveLocalState(state);
-      await pushToCloud(state);
+      pushToCloud(state);
   },
 
   unassignEmployeeFromWindow: async (employeeId: number): Promise<void> => {
@@ -195,7 +227,7 @@ const api = {
       state.windows = state.windows.map(w => w.employeeId === employeeId ? {...w, employeeId: undefined} : w);
       state.employees = state.employees.map(e => e.id === employeeId ? { ...e, windowId: undefined } : e);
       saveLocalState(state);
-      await pushToCloud(state);
+      pushToCloud(state);
   },
   
   addEmployee: async (name: string, username: string, password: string): Promise<Employee> => {
@@ -203,7 +235,7 @@ const api = {
     const newEmp: Employee = { id: Date.now(), name, username, password, status: EmployeeStatus.Available, customersServed: 0 };
     state.employees.push(newEmp);
     saveLocalState(state);
-    await pushToCloud(state);
+    pushToCloud(state);
     return newEmp;
   },
 
@@ -211,7 +243,7 @@ const api = {
     const state = await api.getState();
     state.employees = state.employees.filter(e => e.id !== id);
     saveLocalState(state);
-    await pushToCloud(state);
+    pushToCloud(state);
   },
 
   addWindow: async (name: string, customTask?: string): Promise<Window> => {
@@ -219,7 +251,7 @@ const api = {
     const newWin: Window = { id: Date.now(), name, customTask };
     state.windows.push(newWin);
     saveLocalState(state);
-    await pushToCloud(state);
+    pushToCloud(state);
     return newWin;
   },
 
@@ -227,14 +259,14 @@ const api = {
     const state = await api.getState();
     state.windows = state.windows.filter(w => w.id !== id);
     saveLocalState(state);
-    await pushToCloud(state);
+    pushToCloud(state);
   },
 
   updateWindowTask: async (id: number, task: string): Promise<void> => {
     const state = await api.getState();
     state.windows = state.windows.map(w => w.id === id ? {...w, customTask: task} : w);
     saveLocalState(state);
-    await pushToCloud(state);
+    pushToCloud(state);
   }
 };
 

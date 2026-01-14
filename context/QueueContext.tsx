@@ -1,7 +1,7 @@
 
 import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback, useRef } from 'react';
 import api from '../server/api';
-import { Customer, Employee, Window, QueueSystemState, MeshMessage } from '../types';
+import { Customer, Employee, Window, QueueSystemState, MeshMessage, PrinterConfig } from '../types';
 import { PeerManager, PeerStatus } from '../server/peerManager';
 
 interface QueueContextType {
@@ -22,6 +22,7 @@ interface QueueContextType {
   authenticateEmployee: (username: string, password: string) => Promise<Employee | undefined>;
   authenticateAdmin: (password: string) => Promise<boolean>;
   updateAdminPassword: (newPassword: string) => Promise<void>;
+  updatePrinterConfig: (config: PrinterConfig) => Promise<void>;
   
   // Cloud Sync Methods
   enableCloudSync: () => Promise<string>;
@@ -58,7 +59,6 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, []);
 
-  // بث التحديثات عبر الشبكة المحلية إذا كان الربط نشطاً
   useEffect(() => {
     if (state && meshStatus === 'connected' && peerRef.current) {
       peerRef.current.send({ type: 'STATE_UPDATE', state });
@@ -132,6 +132,7 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     authenticateEmployee: api.authenticateEmployee,
     authenticateAdmin: api.authenticateAdmin,
     updateAdminPassword: api.updateAdminPassword,
+    updatePrinterConfig: (c: PrinterConfig) => performApiCall(() => api.updatePrinterConfig(c)),
     enableCloudSync, joinCloudSync,
     startMeshHost, completeMeshHost, joinMeshClient
   };

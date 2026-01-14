@@ -14,7 +14,7 @@ export class PeerManager {
     this.onStatusChange = onStatusChange;
     this.pc = new RTCPeerConnection({
       iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' } // يساعد في اكتشاف العناوين حتى في الشبكات المحلية المعقدة
+        { urls: 'stun:stun.l.google.com:19302' }
       ]
     });
 
@@ -26,7 +26,6 @@ export class PeerManager {
     };
   }
 
-  // انتظار اكتمال جمع عناوين الشبكة لضمان كود ربط سليم
   private waitForIceGathering() {
     return new Promise<void>((resolve) => {
       if (this.pc.iceGatheringState === 'complete') {
@@ -39,35 +38,39 @@ export class PeerManager {
           }
         };
         this.pc.addEventListener('icegatheringstatechange', checkState);
-        // حد أقصى للانتظار 4 ثواني لضمان عدم تعليق الواجهة
-        setTimeout(resolve, 4000);
+        setTimeout(resolve, 5000); 
       }
     });
   }
 
   async createOffer(): Promise<string> {
-    this.onStatusChange('connecting');
-    this.dc = this.pc.createDataChannel("queue_sync");
-    this.setupDataChannel(this.dc);
-    
-    const offer = await this.pc.createOffer();
-    await this.pc.setLocalDescription(offer);
-    
-    this.onStatusChange('gathering');
-    await this.waitForIceGathering();
-    
-    this.onStatusChange('ready');
-    return btoa(JSON.stringify(this.pc.localDescription));
+    try {
+      this.onStatusChange('connecting');
+      this.dc = this.pc.createDataChannel("queue_sync_channel");
+      this.setupDataChannel(this.dc);
+      
+      const offer = await this.pc.createOffer();
+      await this.pc.setLocalDescription(offer);
+      
+      this.onStatusChange('gathering');
+      await this.waitForIceGathering();
+      
+      this.onStatusChange('ready');
+      return btoa(JSON.stringify(this.pc.localDescription));
+    } catch (e) {
+      this.onStatusChange('failed');
+      throw e;
+    }
   }
 
   async handleOffer(offerStr: string): Promise<string> {
-    this.onStatusChange('connecting');
-    this.pc.ondatachannel = (event) => {
-      this.dc = event.channel;
-      this.setupDataChannel(this.dc);
-    };
-
     try {
+      this.onStatusChange('connecting');
+      this.pc.ondatachannel = (event) => {
+        this.dc = event.channel;
+        this.setupDataChannel(this.dc);
+      };
+
       const offer = JSON.parse(atob(offerStr));
       await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
       
@@ -87,6 +90,12 @@ export class PeerManager {
 
   async handleAnswer(answerStr: string) {
     try {
+      // الحماية من خطأ State: Stable
+      if (this.pc.signalingState === 'stable') {
+        console.log("Connection already stable, ignoring answer.");
+        return;
+      }
+
       const answer = JSON.parse(atob(answerStr));
       await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
     } catch (e) {
@@ -103,7 +112,7 @@ export class PeerManager {
         const msg: MeshMessage = JSON.parse(e.data);
         this.onMessage(msg);
       } catch (err) {
-        console.error("Failed to parse message", err);
+        console.error("Failed to parse mesh message", err);
       }
     };
   }
