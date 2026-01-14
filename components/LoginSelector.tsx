@@ -16,9 +16,10 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 
+    // التعرف التلقائي على حالة الربط
     useEffect(() => {
         if (meshStatus === 'connected') {
-            alert("✅ تم الربط بنجاح! سيتم تذكر هذا الجهاز دائماً.");
+            alert("✅ تم الربط بنجاح! سيتذكر الجهاز هذا النظام دائماً.");
             setLoginMode('none');
         }
     }, [meshStatus]);
@@ -29,7 +30,7 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
             alert("✅ تم الربط بنجاح! هذا الجهاز مرتبط الآن بشكل دائم.");
             setLoginMode('none');
         } else {
-            alert("❌ فشل الربط، تأكد من الكود.");
+            alert("❌ فشل الربط، يرجى التأكد من الكود المكتوب.");
         }
     };
 
@@ -45,7 +46,7 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
                         <span className="flex h-4 w-4 rounded-full bg-green-500 animate-pulse"></span>
                         <span className="text-green-400 font-bold">هذا الجهاز مرتبط بنظام نشط وجاهز للعمل</span>
                         {state?.syncId && (
-                            <span className="bg-slate-800 text-sky-400 px-4 py-1.5 rounded-xl text-xs font-mono font-bold border border-slate-700 ml-4">ID: {state.syncId}</span>
+                            <span className="bg-slate-800 text-sky-400 px-4 py-1.5 rounded-xl text-xs font-mono font-bold border border-slate-700 ml-4">Sync ID: {state.syncId}</span>
                         )}
                     </div>
                 </div>
@@ -58,7 +59,7 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
                             <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                         </div>
                         <h3 className="text-3xl font-bold text-white">كشك العملاء</h3>
-                        <p className="text-slate-500 text-sm mt-3">لإصدار التذاكر للزبائن</p>
+                        <p className="text-slate-500 text-sm mt-3">إصدار تذاكر الدور للزبائن</p>
                     </Card>
 
                     <Card className="bg-slate-800 p-10 cursor-pointer hover:border-sky-500 border border-slate-700 group transition-all rounded-[2.5rem] shadow-2xl" onClick={() => onLogin('display')}>
@@ -66,7 +67,7 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
                             <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                         </div>
                         <h3 className="text-3xl font-bold text-white">الشاشة الكبرى</h3>
-                        <p className="text-slate-500 text-sm mt-3">لعرض الأرقام المستدعاة</p>
+                        <p className="text-slate-500 text-sm mt-3">عرض الأرقام الحالية في الصالة</p>
                     </Card>
                     
                     {!isLinked ? (
@@ -75,12 +76,12 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
                                 <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                             </div>
                             <h3 className="text-3xl font-bold text-sky-400">ربط بالنظام</h3>
-                            <p className="text-slate-500 text-sm mt-3">لمزامنة البيانات (لمرة واحدة فقط)</p>
+                            <p className="text-slate-500 text-sm mt-3">لمزامنة هذا الجهاز مع جهاز رئيسي (لمرة واحدة)</p>
                         </Card>
                     ) : (
                         <Card className="bg-slate-900 p-10 border border-slate-700 rounded-[2.5rem] flex flex-col justify-center">
-                            <p className="text-slate-400 mb-6">الجهاز مرتبط حالياً</p>
-                            <Button variant="danger" size="sm" className="opacity-60 hover:opacity-100 py-3" onClick={() => { if(confirm("هل تريد قطع الارتباط؟")) disconnectSync(); }}>قطع الارتباط بالنظام</Button>
+                            <p className="text-slate-400 mb-6">هذا الجهاز مرتبط فعلياً بنظام</p>
+                            <Button variant="danger" size="sm" className="opacity-60 hover:opacity-100 py-3" onClick={() => { if(confirm("هل تريد قطع الارتباط بهذا النظام؟ سيتوجب عليك إعادة الربط لاحقاً.")) disconnectSync(); }}>قطع الارتباط بالنظام</Button>
                         </Card>
                     )}
 
@@ -103,12 +104,13 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
                         <div className="grid gap-6">
                             <Button onClick={() => setJoinMode('cloud')} className="py-6 text-xl">استخدام كود المزامنة (ID)</Button>
                             <Button variant="secondary" onClick={() => setJoinMode('local')} className="py-6 text-xl">الربط المحلي (LAN)</Button>
-                            <button onClick={() => setLoginMode('none')} className="text-slate-500 mt-4 hover:text-white transition-colors">رجوع</button>
+                            <button onClick={() => setLoginMode('none')} className="text-slate-500 mt-4 hover:text-white transition-colors">رجوع للقائمة</button>
                         </div>
                     ) : (
                         <div className="space-y-6">
-                            <input value={syncIdInput} onChange={e => setSyncIdInput(e.target.value)} placeholder="أدخل الكود هنا..." className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-5 text-white text-center font-mono text-2xl tracking-widest outline-none focus:border-sky-500"/>
-                            <Button className="w-full py-5 text-xl" onClick={handleCloudJoin} disabled={!syncIdInput}>تأكيد الربط</Button>
+                            <p className="text-slate-400 text-sm">أدخل كود المزامنة الذي يظهر في شاشة الإدارة بالجهاز الرئيسي:</p>
+                            <input value={syncIdInput} onChange={e => setSyncIdInput(e.target.value)} placeholder="مثال: f8c1..." className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-5 text-white text-center font-mono text-2xl tracking-widest outline-none focus:border-sky-500"/>
+                            <Button className="w-full py-5 text-xl" onClick={handleCloudJoin} disabled={!syncIdInput}>تفعيل الربط الدائم</Button>
                             <button onClick={() => setJoinMode('none')} className="w-full text-slate-500">إلغاء</button>
                         </div>
                     )}

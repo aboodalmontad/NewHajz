@@ -46,6 +46,7 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
         try {
             await action();
         } finally {
+            // مهلة قصيرة جداً لمنع تعدد النقرات مع الحفاظ على شعور السرعة
             setTimeout(() => setLocalLoading(false), 150);
         }
     };
@@ -97,6 +98,7 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
                 )}
             </Card>
             
+            {/* تثبيت الارتفاع الأدنى (min-h) يمنع اهتزاز الشاشة عند التبديل بين "انتظار" و "خدمة" */}
             <Card className="bg-slate-800 p-6 flex flex-col items-center justify-center min-h-[450px] border border-slate-700 transition-all duration-300">
                 {isServing && (
                      <div className="text-center w-full animate-in fade-in zoom-in duration-200">

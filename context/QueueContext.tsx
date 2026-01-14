@@ -78,15 +78,16 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  // وظيفة محسنة للتحديث اللحظي (Optimistic UI)
   const performAction = async (action: () => Promise<QueueSystemState | null>) => {
     try {
         const updatedState = await action();
         if (updatedState) {
-            setState({ ...updatedState }); // تحديث فوري بدون فليكر
+            setState({ ...updatedState }); // تحديث الحالة فوراً من البيانات المرجعة
         }
     } catch (e) {
       console.error("Action Call Error:", e);
-      await fetchState(); // استعادة في حال الخطأ
+      await fetchState(); // استعادة الحالة الأصلية في حال فشل العملية
     }
   };
 
