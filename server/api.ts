@@ -150,6 +150,23 @@ const api = {
     return false;
   },
 
+  createCustomSyncSession: async (customId: string): Promise<boolean> => {
+    const currentState = loadLocalState();
+    currentState.syncId = customId;
+    saveLocalState(currentState);
+    try {
+      await fetch(`${SYNC_ENDPOINT}/${customId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentState)
+      });
+      return true;
+    } catch (e) {
+      console.error("Custom sync error", e);
+      return false;
+    }
+  },
+
   authenticateEmployee: async (username: string, password: string): Promise<Employee | undefined> => {
     const state = await api.getState();
     return state.employees.find(e => e.username.toLowerCase() === username.toLowerCase() && e.password === password);

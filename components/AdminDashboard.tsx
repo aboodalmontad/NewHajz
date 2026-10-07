@@ -13,7 +13,7 @@ const AdminDashboard: React.FC = () => {
         addWindow, updateWindowName, removeWindow, updateWindowTask,
         resetSystem, updateAdminPassword, rateCustomer,
         startMeshHost, completeMeshHost, meshStatus,
-        enableCloudSync
+        enableCloudSync, createCustomSyncSession
     } = useQueueSystem();
     
     const [activeTab, setActiveTab] = useState<'overview' | 'management' | 'stats' | 'printer' | 'sync'>('overview');
@@ -40,6 +40,19 @@ const AdminDashboard: React.FC = () => {
     const [offerToken, setOfferToken] = useState('');
     const [answerToken, setAnswerToken] = useState('');
     const [cloudSyncId, setCloudSyncId] = useState('');
+    const [customCode, setCustomCode] = useState('');
+
+    const handleCreateCustomSync = async () => {
+        if (!customCode) return;
+        const success = await createCustomSyncSession(customCode.trim());
+        if (success) {
+            alert(`✅ تم ربط وتفعيل الشبكة بالرمز المخصص: ${customCode}`);
+            setCloudSyncId(customCode.trim());
+            setCustomCode('');
+        } else {
+            alert("❌ فشل تفعيل الرمز المخصص.");
+        }
+    };
 
     React.useEffect(() => {
         if (meshStatus === 'connected') {
@@ -428,14 +441,29 @@ const AdminDashboard: React.FC = () => {
                                 <div className="space-y-4 animate-in fade-in" onClick={e => e.stopPropagation()}>
                                     {state.syncId || cloudSyncId ? (
                                         <div className="bg-slate-900 p-4 rounded-xl border border-sky-500/30">
-                                            <p className="text-xs text-sky-400 font-bold mb-1">كود المزامنة (Sync ID):</p>
+                                            <p className="text-xs text-sky-400 font-bold mb-1">كود المزامنة الحالي (Sync ID):</p>
                                             <div className="flex justify-between items-center">
-                                                <p className="text-2xl font-mono font-bold text-white tracking-widest">{state.syncId || cloudSyncId}</p>
+                                                <p className="text-xl font-mono font-bold text-white tracking-widest">{state.syncId || cloudSyncId}</p>
                                                 <button onClick={() => copyToClipboard(state.syncId || cloudSyncId)} className="text-sky-500 text-sm hover:underline">نسخ</button>
                                             </div>
                                         </div>
-                                    ) : (
-                                        <Button className="w-full" onClick={handleEnableCloud}>تفعيل المزامنة السحابية</Button>
+                                    ) : null}
+
+                                    <div className="space-y-2 pt-2 border-t border-slate-700">
+                                        <label className="text-xs text-slate-400 block">ربط أجهزة الشبكة بكود قصير مخصص (مثال: <span className="text-sky-400">branch1</span> أو <span className="text-sky-400">1234</span>):</label>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                value={customCode} 
+                                                onChange={e => setCustomCode(e.target.value)} 
+                                                placeholder="أدخل رمز الغرفة..."
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-sky-500"
+                                            />
+                                            <Button onClick={handleCreateCustomSync} disabled={!customCode} className="whitespace-nowrap">ربط الجهاز</Button>
+                                        </div>
+                                    </div>
+
+                                    {!state.syncId && !cloudSyncId && (
+                                        <Button className="w-full" onClick={handleEnableCloud}>توليد كود تلقائي عشوائي</Button>
                                     )}
                                 </div>
                             )}
@@ -445,8 +473,8 @@ const AdminDashboard: React.FC = () => {
                             <div className="bg-green-500/10 w-16 h-16 rounded-3xl flex items-center justify-center text-green-500 mb-6">
                                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>
                             </div>
-                            <h4 className="text-2xl font-bold text-white mb-2">الربط المحلي (LAN)</h4>
-                            <p className="text-slate-400 text-sm leading-relaxed mb-4">الأفضل داخل نفس الشبكة المحلية. يعتمد على تقنية الاتصال المباشر بين المتصفحات (WebRTC).</p>
+                            <h4 className="text-2xl font-bold text-white mb-2">المزامنة المحلية التلقائية</h4>
+                            <p className="text-slate-400 text-sm leading-relaxed mb-4">يتم ربط ومزامنة جميع النوافذ والأبواب المفتوحة على جهازك (الشاشة الرئيسية، الكشك، الموظفون) <span className="text-green-400 font-bold">تلقائياً وفورياً</span> بدون أي أكواد أو خطوات إضافية.</p>
                             <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-700/60 mb-6 text-xs text-slate-400 space-y-1">
                                 <p className="text-amber-400 font-bold">⚠️ ملاحظة هامة:</p>
                                 <p>في حال واجهت قيوداً من جدار الحماية (Firewall) أو متصفح البيئة السحابية تمنع الربط المحلي، يُنصح بشدة باستخدام <span className="text-sky-400 font-bold">المزامنة السحابية</span> لضمان الاستقرار الفوري.</p>

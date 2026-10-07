@@ -31,6 +31,7 @@ interface QueueContextType {
   // Cloud Sync Methods
   enableCloudSync: () => Promise<string>;
   joinCloudSync: (syncId: string) => Promise<boolean>;
+  createCustomSyncSession: (customId: string) => Promise<boolean>;
   
   // Local Mesh Methods
   startMeshHost: () => Promise<string>;
@@ -68,6 +69,37 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       peerRef.current.send({ type: 'STATE_UPDATE', state });
     }
   }, [state, meshStatus]);
+
+  // BroadcastChannel for instant automatic local multi-window / multi-screen sync
+  useEffect(() => {
+    const channel = new BroadcastChannel('smart_queue_broadcast_v1');
+    channel.onmessage = (event) => {
+      if (event.data && event.data.type === 'STATE_SYNC' && event.data.state) {
+        const remoteState = event.data.state;
+        remoteState.customers?.forEach((c: any) => {
+          if (c.requestTime) c.requestTime = new Date(c.requestTime);
+          if (c.callTime) c.callTime = new Date(c.callTime);
+          if (c.finishTime) c.finishTime = new Date(c.finishTime);
+        });
+        setState(remoteState);
+        localStorage.setItem('smart_queue_system_state_v1', JSON.stringify(remoteState));
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (state) {
+      try {
+        const channel = new BroadcastChannel('smart_queue_broadcast_v1');
+        channel.postMessage({ type: 'STATE_SYNC', state });
+        channel.close();
+      } catch (e) {}
+    }
+  }, [state]);
 
   useEffect(() => {
     fetchState();
@@ -142,6 +174,11 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     updateAdminPassword: api.updateAdminPassword,
     updatePrinterConfig: (c: PrinterConfig) => performApiCall(() => api.updatePrinterConfig(c)),
     enableCloudSync, joinCloudSync,
+    createCustomSyncSession: async (customId: string) => {
+        const success = await api.createCustomSyncSession(customId);
+        if (success) await fetchState();
+        return success;
+    },
     startMeshHost, completeMeshHost, joinMeshClient
   };
 
