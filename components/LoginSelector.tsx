@@ -71,46 +71,22 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
                     </Card>
                 </div>
             ) : loginMode === 'sync_join' ? (
-                <div className="max-w-2xl mx-auto bg-slate-800 p-10 rounded-3xl border border-slate-700 shadow-2xl">
-                    <h2 className="text-3xl font-bold text-white mb-8">اختر طريقة الربط</h2>
+                <div className="max-w-xl mx-auto bg-slate-800 p-10 rounded-3xl border border-slate-700 shadow-2xl text-right">
+                    <h2 className="text-3xl font-bold text-white mb-4">ربط الأجهزة على الشبكة</h2>
+                    <p className="text-slate-400 text-sm mb-8">أدخل كود الغرفة أو الفرع القصير الموحد على جميع الأجهزة (مثال: <span className="text-sky-400 font-bold">123</span> أو <span className="text-sky-400 font-bold">branch1</span>):</p>
                     
-                    {joinMode === 'none' ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Button onClick={() => setJoinMode('cloud')} className="py-6">مزامنة سحابية (Sync ID)</Button>
-                            <Button variant="secondary" onClick={() => setJoinMode('local')} className="py-6">ربط محلي (LAN)</Button>
-                            <button onClick={() => setLoginMode('none')} className="col-span-full text-slate-500 mt-4 hover:underline text-sm">إلغاء والعودة</button>
+                    <div className="space-y-6">
+                        <div>
+                            <input 
+                                value={syncId} 
+                                onChange={e => setSyncId(e.target.value)} 
+                                placeholder="أدخل كود الشبكة (مثال: 123)..." 
+                                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-5 text-white text-center font-mono text-2xl tracking-widest outline-none focus:border-sky-500"
+                            />
                         </div>
-                    ) : joinMode === 'cloud' ? (
-                        <div className="space-y-6 text-right">
-                            <div>
-                                <label className="text-slate-400 text-sm block mb-2">أدخل معرف المزامنة (Sync ID) من الجهاز الرئيسي:</label>
-                                <input value={syncId} onChange={e => setSyncId(e.target.value)} placeholder="مثال: f6d8... " className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white text-center font-mono text-xl tracking-widest outline-none focus:border-sky-500"/>
-                            </div>
-                            <Button className="w-full py-4" onClick={handleCloudJoin} disabled={!syncId}>تفعيل الربط السحابي</Button>
-                            <button onClick={() => setJoinMode('none')} className="w-full text-slate-500 text-sm">رجوع</button>
-                        </div>
-                    ) : (
-                        <div className="space-y-6 text-right">
-                             <div className="bg-slate-900/80 p-4 rounded-xl border border-amber-500/30 text-xs text-slate-300 space-y-1">
-                                 <p className="text-amber-400 font-bold">⚠️ ملاحظة حول الربط المحلي (WebRTC):</p>
-                                 <p>الربط المحلي قد يتأثر بإعدادات جدار الحماية (Firewall) أو متصفح الـ Sandbox. إذا واجهت صعوبة، يُنصح بشدة باستخدام <span className="text-sky-400 font-bold">المزامنة السحابية</span> لسهولة واستقرار تام.</p>
-                             </div>
-                              <div>
-                                <label className="text-slate-400 text-sm block mb-2">الصق كود العرض من الجهاز الرئيسي:</label>
-                                <textarea value={offerToken} onChange={e => setOfferToken(e.target.value)} className="w-full h-32 bg-slate-900 border border-slate-700 rounded-xl p-4 text-[8px] font-mono text-white outline-none focus:border-green-500" placeholder="الصق الكود هنا..." />
-                            </div>
-                            <Button className="w-full py-4" onClick={handleLocalJoin} disabled={!offerToken}>توليد كود الرد</Button>
-                            
-                            {answerToken && (
-                                <div className="p-4 bg-slate-900 rounded-xl border border-green-500/30 animate-in slide-in-from-top-2">
-                                    <p className="text-xs text-green-400 mb-2 font-bold">انسخ هذا الكود وارجع به للجهاز الرئيسي:</p>
-                                    <textarea readOnly value={answerToken} className="w-full h-24 bg-transparent text-[8px] text-white font-mono outline-none" />
-                                    <p className="text-[10px] text-slate-500 mt-2">بمجرد تفعيل هذا الكود هناك، سيعمل هذا الجهاز تلقائياً.</p>
-                                </div>
-                            )}
-                            <button onClick={() => setJoinMode('none')} className="w-full text-slate-500 text-sm">رجوع</button>
-                        </div>
-                    )}
+                        <Button className="w-full py-4 text-lg font-bold" onClick={handleCloudJoin} disabled={!syncId}>اتصال فوري بالشبكة</Button>
+                        <button onClick={() => setLoginMode('none')} className="w-full text-slate-500 text-sm mt-4 hover:underline text-center block">إلغاء والعودة</button>
+                    </div>
                 </div>
             ) : (
                 <div className="max-w-md mx-auto bg-slate-800 p-10 rounded-3xl border border-slate-700 animate-in zoom-in">
