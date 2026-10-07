@@ -3,7 +3,7 @@ import { QueueSystemState, Employee, Window, Customer, EmployeeStatus, CustomerS
 
 const STORAGE_KEY = 'smart_queue_system_state_v1';
 const ADMIN_PASSWORD_KEY = 'admin_password_config';
-const SYNC_ENDPOINT = 'https://jsonblob.com/api/jsonBlob';
+const SYNC_ENDPOINT = 'https://api.npoint.io';
 
 const DEFAULT_PRINTER_CONFIG: PrinterConfig = {
   paperWidth: '80mm',
@@ -117,17 +117,22 @@ const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(currentState)
       });
-      const location = response.headers.get('Location');
-      const syncId = location?.split('/').pop() || '';
-      if (syncId) {
-        currentState.syncId = syncId;
-        saveLocalState(currentState);
-        return syncId;
+      if (response.ok) {
+        const data = await response.json();
+        const syncId = data.id || '';
+        if (syncId) {
+          currentState.syncId = syncId;
+          saveLocalState(currentState);
+          return syncId;
+        }
       }
     } catch (e) {
       console.error("Session creation error:", e);
     }
-    return '';
+    const fallbackId = 'SYNC-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    currentState.syncId = fallbackId;
+    saveLocalState(currentState);
+    return fallbackId;
   },
 
   joinSyncSession: async (syncId: string): Promise<boolean> => {
@@ -253,6 +258,13 @@ const api = {
     return newEmp;
   },
 
+  updateEmployee: async (id: number, name: string, username: string, password?: string): Promise<void> => {
+    const state = await api.getState();
+    state.employees = state.employees.map(e => e.id === id ? { ...e, name, username, ...(password ? { password } : {}) } : e);
+    saveLocalState(state);
+    pushToCloud(state);
+  },
+
   removeEmployee: async (id: number): Promise<void> => {
     const state = await api.getState();
     state.employees = state.employees.filter(e => e.id !== id);
@@ -269,6 +281,13 @@ const api = {
     return newWin;
   },
 
+  updateWindowName: async (id: number, name: string): Promise<void> => {
+    const state = await api.getState();
+    state.windows = state.windows.map(w => w.id === id ? {...w, name} : w);
+    saveLocalState(state);
+    pushToCloud(state);
+  },
+
   removeWindow: async (id: number): Promise<void> => {
     const state = await api.getState();
     state.windows = state.windows.filter(w => w.id !== id);
@@ -279,6 +298,24 @@ const api = {
   updateWindowTask: async (id: number, task: string): Promise<void> => {
     const state = await api.getState();
     state.windows = state.windows.map(w => w.id === id ? {...w, customTask: task} : w);
+    saveLocalState(state);
+    pushToCloud(state);
+  },
+
+  rateCustomer: async (customerId: number, rating: number, feedback?: string): Promise<void> => {
+    const state = await api.getState();
+    state.customers = state.customers.map(c => c.id === customerId ? { ...c, rating, feedback } : c);
+    saveLocalState(state);
+    pushToCloud(state);
+  },
+
+  resetSystem: async (): Promise<void> => {
+    const state = await api.getState();
+    state.customers = [];
+    state.queue = [];
+    state.ticketCounter = 100;
+    state.windows = state.windows.map(w => ({ ...w, currentCustomerId: undefined, employeeId: undefined }));
+    state.employees = state.employees.map(e => ({ ...e, windowId: undefined, status: EmployeeStatus.Available, customersServed: 0 }));
     saveLocalState(state);
     pushToCloud(state);
   }

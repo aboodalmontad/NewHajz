@@ -31,6 +31,8 @@ export interface Customer {
   servedBy?: number;
   windowId?: number;
   serviceName?: string;
+  rating?: number;
+  feedback?: string;
 }
 
 export interface Employee {

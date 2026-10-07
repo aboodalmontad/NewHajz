@@ -19,6 +19,14 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
 
+    useEffect(() => {
+        if (meshStatus === 'connected') {
+            alert("✅ تم بنجاح! تم تأسيس الاتصال المحلي (LAN) بين الجهازين بنجاح وتفعيل المزامنة.");
+        } else if (meshStatus === 'failed') {
+            alert("❌ فشل الربط المحلي (WebRTC).\n\nالسبب المحتمل:\n1. قيود جدار الحماية (Firewall) أو شبكة الإنترنت التي تمنع اتصال الأجهزة المباشر.\n2. إعدادات المتصفح أو بيئة الـ Sandbox الأمنية.\n\n💡 الحل: يُنصح بشدة باستخدام (المزامنة السحابية) كبديل فوري ومستقر بنسبة 100%.");
+        }
+    }, [meshStatus]);
+
     const handleCloudJoin = async () => {
         const success = await joinCloudSync(syncId);
         if (success) {
@@ -34,7 +42,7 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
             const answer = await joinMeshClient(offerToken);
             setAnswerToken(answer);
         } catch (e) {
-            alert("كود غير صالح.");
+            alert("❌ فشل معالجة كود العرض.\nالسبب: الكود المدخل غير صالح، تالف، أو تم إلغاء الجلسة. تأكد من نسخ الكود كاملاً من الجهاز الرئيسي.");
         }
     };
 
@@ -83,7 +91,11 @@ const LoginSelector: React.FC<{ onLogin: (view: string, employee?: Employee) => 
                         </div>
                     ) : (
                         <div className="space-y-6 text-right">
-                             <div>
+                             <div className="bg-slate-900/80 p-4 rounded-xl border border-amber-500/30 text-xs text-slate-300 space-y-1">
+                                 <p className="text-amber-400 font-bold">⚠️ ملاحظة حول الربط المحلي (WebRTC):</p>
+                                 <p>الربط المحلي قد يتأثر بإعدادات جدار الحماية (Firewall) أو متصفح الـ Sandbox. إذا واجهت صعوبة، يُنصح بشدة باستخدام <span className="text-sky-400 font-bold">المزامنة السحابية</span> لسهولة واستقرار تام.</p>
+                             </div>
+                              <div>
                                 <label className="text-slate-400 text-sm block mb-2">الصق كود العرض من الجهاز الرئيسي:</label>
                                 <textarea value={offerToken} onChange={e => setOfferToken(e.target.value)} className="w-full h-32 bg-slate-900 border border-slate-700 rounded-xl p-4 text-[8px] font-mono text-white outline-none focus:border-green-500" placeholder="الصق الكود هنا..." />
                             </div>

@@ -15,10 +15,14 @@ interface QueueContextType {
   assignEmployeeToWindow: (employeeId: number, windowId: number) => Promise<void>;
   unassignEmployeeFromWindow: (employeeId: number) => Promise<void>;
   addEmployee: (name: string, username: string, password: string) => Promise<void>;
+  updateEmployee: (id: number, name: string, username: string, password?: string) => Promise<void>;
   removeEmployee: (id: number) => Promise<void>;
   addWindow: (name: string, customTask?: string) => Promise<void>;
+  updateWindowName: (id: number, name: string) => Promise<void>;
   removeWindow: (id: number) => Promise<void>;
   updateWindowTask: (id: number, task: string) => Promise<void>;
+  rateCustomer: (customerId: number, rating: number, feedback?: string) => Promise<void>;
+  resetSystem: () => Promise<void>;
   authenticateEmployee: (username: string, password: string) => Promise<Employee | undefined>;
   authenticateAdmin: (password: string) => Promise<boolean>;
   updateAdminPassword: (newPassword: string) => Promise<void>;
@@ -125,10 +129,14 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     assignEmployeeToWindow: (eid: number, wid: number) => performApiCall(() => api.assignEmployeeToWindow(eid, wid)),
     unassignEmployeeFromWindow: (id: number) => performApiCall(() => api.unassignEmployeeFromWindow(id)),
     addEmployee: (n: string, u: string, p: string) => performApiCall(() => api.addEmployee(n, u, p)),
+    updateEmployee: (id: number, n: string, u: string, p?: string) => performApiCall(() => api.updateEmployee(id, n, u, p)),
     removeEmployee: (id: number) => performApiCall(() => api.removeEmployee(id)),
     addWindow: (n: string, t?: string) => performApiCall(() => api.addWindow(n, t)),
+    updateWindowName: (id: number, n: string) => performApiCall(() => api.updateWindowName(id, n)),
     removeWindow: (id: number) => performApiCall(() => api.removeWindow(id)),
     updateWindowTask: (id: number, t: string) => performApiCall(() => api.updateWindowTask(id, t)),
+    rateCustomer: (cid: number, rating: number, fb?: string) => performApiCall(() => api.rateCustomer(cid, rating, fb)),
+    resetSystem: () => performApiCall(() => api.resetSystem()),
     authenticateEmployee: api.authenticateEmployee,
     authenticateAdmin: api.authenticateAdmin,
     updateAdminPassword: api.updateAdminPassword,
