@@ -54,6 +54,43 @@ const AdminDashboard: React.FC = () => {
         }
     };
 
+    const handleClearCache = async () => {
+        if (window.confirm("هل أنت متأكد من مسح الكاش والذاكرة المؤقتة بالكامل؟ سيتم مسح كافة البيانات وإعادة تحميل التطبيق نظيفاً.")) {
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(cacheNames.map(name => caches.delete(name)));
+                }
+
+                if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    for (const reg of regs) {
+                        await reg.unregister();
+                    }
+                }
+
+                window.location.href = window.location.origin + window.location.pathname;
+            } catch (e) {
+                console.error("Clear cache error:", e);
+                localStorage.clear();
+                window.location.reload();
+            }
+        }
+    };
+
+    const handleDownloadBackup = () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `smart_queue_backup_${new Date().toISOString().slice(0,10)}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+    };
+
     React.useEffect(() => {
         if (meshStatus === 'connected') {
             alert("✅ تم بنجاح! تم تأسيس الاتصال المحلي (LAN) بين الجهازين بنجاح وتفعيل المزامنة.");
@@ -236,6 +273,20 @@ const AdminDashboard: React.FC = () => {
                             <Button variant="secondary" className="!bg-red-600/20 hover:!bg-red-600 !text-red-400 hover:!text-white !border-red-500/50" onClick={handleResetSystem}>
                                 تصفير الطابور والنظام بالكامل
                             </Button>
+                        </Card>
+
+                        {/* Maintenance & Cache Card */}
+                        <Card className="bg-slate-800 p-8 border border-slate-700 space-y-4 col-span-full">
+                            <h3 className="text-xl font-bold text-white mb-2">إدارة الكاش وتحميل البيانات</h3>
+                            <p className="text-slate-400 text-sm">يمكنك مسح الكاش والذاكرة المؤقتة بالكامل، أو تحميل نسخة احتياطية لبيانات التطبيق.</p>
+                            <div className="flex flex-wrap gap-4 pt-2">
+                                <Button variant="secondary" className="!bg-sky-600/20 text-sky-400 hover:!bg-sky-600 hover:text-white border-sky-500/40" onClick={handleDownloadBackup}>
+                                    📥 تحميل بيانات ونظام التطبيق (Backup)
+                                </Button>
+                                <Button variant="secondary" className="!bg-red-600/20 text-red-400 hover:!bg-red-600 hover:text-white border-red-500/40" onClick={handleClearCache}>
+                                    🧹 مسح الكاش وذاكرة التخزين المؤقت
+                                </Button>
+                            </div>
                         </Card>
                     </div>
                 </div>
