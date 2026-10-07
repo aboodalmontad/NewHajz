@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
 import { Button } from './shared/Button';
 import { Card } from './shared/Card';
