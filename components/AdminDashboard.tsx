@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
-import { Employee, CustomerStatus, Customer } from '../types';
+import { Employee, CustomerStatus } from '../types';
 import { Button } from './shared/Button';
 import { Card } from './shared/Card';
 import { Modal } from './shared/Modal';
@@ -12,8 +12,7 @@ const AdminDashboard: React.FC = () => {
         addEmployee, updateEmployee, removeEmployee, 
         addWindow, updateWindowName, removeWindow, updateWindowTask,
         resetSystem, updateAdminPassword, rateCustomer,
-        startMeshHost, completeMeshHost, meshStatus,
-        enableCloudSync, createCustomSyncSession
+        createCustomSyncSession, enableCloudSync
     } = useQueueSystem();
     
     const [activeTab, setActiveTab] = useState<'overview' | 'management' | 'stats' | 'printer' | 'sync'>('overview');
@@ -35,69 +34,9 @@ const AdminDashboard: React.FC = () => {
     const [newAdminPass, setNewAdminPass] = useState('');
     const [adminPassMsg, setAdminPassMsg] = useState('');
 
-    // Sync state
-    const [syncMode, setSyncMode] = useState<'none' | 'cloud' | 'local'>('none');
-    const [offerToken, setOfferToken] = useState('');
-    const [answerToken, setAnswerToken] = useState('');
-    const [cloudSyncId, setCloudSyncId] = useState('');
+    // Local Network Sync state
     const [customCode, setCustomCode] = useState('');
-
-    const handleCreateCustomSync = async () => {
-        if (!customCode) return;
-        const success = await createCustomSyncSession(customCode.trim());
-        if (success) {
-            alert(`✅ تم ربط وتفعيل الشبكة بالرمز المخصص: ${customCode}`);
-            setCloudSyncId(customCode.trim());
-            setCustomCode('');
-        } else {
-            alert("❌ فشل تفعيل الرمز المخصص.");
-        }
-    };
-
-    const handleClearCache = async () => {
-        if (window.confirm("هل أنت متأكد من مسح الكاش والذاكرة المؤقتة بالكامل؟ سيتم مسح كافة البيانات وإعادة تحميل التطبيق نظيفاً.")) {
-            try {
-                localStorage.clear();
-                sessionStorage.clear();
-
-                if ('caches' in window) {
-                    const cacheNames = await caches.keys();
-                    await Promise.all(cacheNames.map(name => caches.delete(name)));
-                }
-
-                if ('serviceWorker' in navigator) {
-                    const regs = await navigator.serviceWorker.getRegistrations();
-                    for (const reg of regs) {
-                        await reg.unregister();
-                    }
-                }
-
-                window.location.href = window.location.origin + window.location.pathname;
-            } catch (e) {
-                console.error("Clear cache error:", e);
-                localStorage.clear();
-                window.location.reload();
-            }
-        }
-    };
-
-    const handleDownloadBackup = () => {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
-        const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute("download", `smart_queue_backup_${new Date().toISOString().slice(0,10)}.json`);
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        downloadAnchor.remove();
-    };
-
-    React.useEffect(() => {
-        if (meshStatus === 'connected') {
-            alert("✅ تم بنجاح! تم تأسيس الاتصال المحلي (LAN) بين الجهازين بنجاح وتفعيل المزامنة.");
-        } else if (meshStatus === 'failed') {
-            alert("❌ فشل الربط المحلي (WebRTC).\n\nالسبب المحتمل:\n1. قيود جدار الحماية (Firewall) أو شبكة الإنترنت التي تمنع اتصال الأجهزة المباشر.\n2. إعدادات المتصفح أو بيئة الـ Sandbox الأمنية.\n\n💡 الحل: يُنصح بشدة باستخدام (المزامنة السحابية) كبديل فوري ومستقر بنسبة 100%.");
-        }
-    }, [meshStatus]);
+    const [isConnecting, setIsConnecting] = useState(false);
 
     const handleOpenAddEmployee = () => {
         setEditingEmployee(null);
@@ -179,21 +118,74 @@ const AdminDashboard: React.FC = () => {
             "خدمة مقبولة"
         ];
         for (const c of served) {
-            const randomRating = Math.floor(Math.random() * 2) + 4; // 4 or 5 stars
+            const randomRating = Math.floor(Math.random() * 2) + 4;
             const randomFeedback = feedbacks[Math.floor(Math.random() * feedbacks.length)];
             await rateCustomer(c.id, randomRating, randomFeedback);
         }
         alert("تم توليد تقييمات تجريبية للعملاء بنجاح!");
     };
 
-    const handleEnableCloud = async () => {
-        const id = await enableCloudSync();
-        setCloudSyncId(id);
+    const handleSetNetworkCode = async (codeToSet: string) => {
+        if (!codeToSet.trim()) return;
+        setIsConnecting(true);
+        try {
+            const success = await createCustomSyncSession(codeToSet.trim());
+            if (success) {
+                alert(`✅ تم تفعيل كود الربط بالشبكة المحلية بنجاح: ${codeToSet.trim()}`);
+                setCustomCode('');
+            } else {
+                alert("❌ تعذر تفعيل كود الشبكة، يرجى المحاولة مرة أخرى.");
+            }
+        } finally {
+            setIsConnecting(false);
+        }
     };
 
-    const handleStartLocalHost = async () => {
-        const token = await startMeshHost();
-        setOfferToken(token);
+    const handleGenerateAutoCode = async () => {
+        setIsConnecting(true);
+        try {
+            const id = await enableCloudSync();
+            alert(`✅ تم توليد وتفعيل كود الشبكة بنجاح: ${id}`);
+        } finally {
+            setIsConnecting(false);
+        }
+    };
+
+    const handleClearCache = async () => {
+        if (window.confirm("هل أنت متأكد من مسح الكاش والذاكرة المؤقتة بالكامل؟ سيتم مسح كافة البيانات وإعادة تحميل التطبيق نظيفاً.")) {
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(cacheNames.map(name => caches.delete(name)));
+                }
+
+                if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    for (const reg of regs) {
+                        await reg.unregister();
+                    }
+                }
+
+                window.location.href = window.location.origin + window.location.pathname;
+            } catch (e) {
+                console.error("Clear cache error:", e);
+                localStorage.clear();
+                window.location.reload();
+            }
+        }
+    };
+
+    const handleDownloadBackup = () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `smart_queue_backup_${new Date().toISOString().slice(0,10)}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
     };
 
     const copyToClipboard = (text: string) => {
@@ -216,16 +208,16 @@ const AdminDashboard: React.FC = () => {
                 <div>
                     <h2 className="text-4xl font-extrabold text-white tracking-tight">لوحة الإدارة الشاملة</h2>
                     <p className="text-slate-400 mt-2 flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${state.syncId || meshStatus === 'connected' ? 'bg-green-500' : 'bg-slate-500'}`}></span>
-                        {state.syncId ? `مزامنة سحابية نشطة: ${state.syncId}` : meshStatus === 'connected' ? 'ربط محلي نشط' : 'وضع العمل المنفرد'}
+                        <span className={`w-2 h-2 rounded-full ${state.syncId ? 'bg-green-500 animate-pulse' : 'bg-slate-500'}`}></span>
+                        {state.syncId ? `متصل بالشبكة المحلية (كود الربط: ${state.syncId})` : 'وضع العمل المحلي المستقل'}
                     </p>
                 </div>
                 <div className="flex bg-slate-800 p-1.5 rounded-2xl border border-slate-700 shadow-inner overflow-x-auto max-w-full">
                     <button onClick={() => setActiveTab('overview')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'overview' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>نظرة عامة والنظام</button>
                     <button onClick={() => setActiveTab('management')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'management' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>إدارة الموظفين والشبابيك</button>
+                    <button onClick={() => setActiveTab('sync')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'sync' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>الربط بالشبكة المحلية</button>
                     <button onClick={() => setActiveTab('stats')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'stats' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>الإحصائيات والتقييمات</button>
                     <button onClick={() => setActiveTab('printer')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'printer' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>إعدادات الطباعة</button>
-                    <button onClick={() => setActiveTab('sync')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'sync' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>الربط والمزامنة</button>
                 </div>
             </div>
 
@@ -289,6 +281,84 @@ const AdminDashboard: React.FC = () => {
                             </div>
                         </Card>
                     </div>
+                </div>
+            )}
+
+            {/* Local Network Connection Tab */}
+            {activeTab === 'sync' && (
+                <div className="max-w-3xl mx-auto space-y-8 animate-in zoom-in duration-300">
+                    <div className="text-center">
+                        <div className="bg-sky-500/10 w-20 h-20 rounded-3xl flex items-center justify-center text-sky-400 mx-auto mb-4">
+                            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        </div>
+                        <h3 className="text-3xl font-extrabold text-white">الربط المباشر بالشبكة المحلية</h3>
+                        <p className="text-slate-400 text-base mt-2">طريقة واحدة موحدة وسريعة لربط كافة الأجهزة (الكشك، شاشات العرض، والموظفين) بكود بسيط.</p>
+                    </div>
+
+                    <Card className="bg-slate-800 p-8 border border-slate-700 space-y-8 shadow-2xl">
+                        {state.syncId ? (
+                            <div className="bg-slate-900 p-6 rounded-2xl border border-green-500/40 space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
+                                        <span className="text-green-400 font-bold text-sm">الشبكة نشطة ومتصلة</span>
+                                    </div>
+                                    <button onClick={() => copyToClipboard(state.syncId || '')} className="text-sky-400 text-sm hover:underline font-bold">نسخ الكود</button>
+                                </div>
+                                <div className="text-center py-2">
+                                    <p className="text-xs text-slate-400 mb-1">كود الشبكة الحالي:</p>
+                                    <p className="text-4xl font-mono font-black text-white tracking-widest">{state.syncId}</p>
+                                </div>
+                                <p className="text-xs text-slate-400 text-center">أدخل هذا الكود في الأجهزة الأخرى لتتصل بهذا النظام فورياً.</p>
+                            </div>
+                        ) : (
+                            <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 text-center">
+                                <p className="text-slate-400 text-sm">لم يتم تعيين كود شبكة بعد. اكتب كوداً مخصصاً أدناه لربط أجهزتك فورياً.</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            <label className="text-sm font-bold text-white block">تعيين كود شبكة جديد (أدخل كود من اختيارك مثل: 1234 أو desk1):</label>
+                            <div className="flex gap-3">
+                                <input 
+                                    value={customCode} 
+                                    onChange={e => setCustomCode(e.target.value)} 
+                                    placeholder="اكتب كود الشبكة (مثال: 1234)..."
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-5 py-4 text-white text-lg font-mono tracking-wider outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                                />
+                                <Button 
+                                    onClick={() => handleSetNetworkCode(customCode)} 
+                                    disabled={!customCode.trim() || isConnecting} 
+                                    className="whitespace-nowrap px-8 py-4 text-base font-bold"
+                                >
+                                    تفعيل الكود
+                                </Button>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-2">
+                                <span className="text-xs text-slate-500">أكواد مقترحة سريعة:</span>
+                                {['1234', 'desk1', 'branch1', 'room1'].map(suggested => (
+                                    <button 
+                                        key={suggested} 
+                                        onClick={() => handleSetNetworkCode(suggested)} 
+                                        className="text-xs bg-slate-900 hover:bg-slate-700 text-sky-400 px-3 py-1.5 rounded-lg border border-slate-700 font-mono transition-colors"
+                                    >
+                                        {suggested}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="border-t border-slate-700/60 pt-6">
+                            <h4 className="text-white font-bold text-sm mb-3">📋 خطوات ربط باقي الأجهزة (الكشك، شاشات العرض، الموظفين):</h4>
+                            <ol className="text-slate-300 text-xs space-y-2 list-decimal list-inside leading-relaxed">
+                                <li>افتح التطبيق على الجهاز الآخر (كمبيوتر، تابلت، أو شاشة).</li>
+                                <li>من الشاشة الرئيسية اختر <strong className="text-sky-400">"الربط بالشبكة المحلية"</strong>.</li>
+                                <li>اكتب نفس الكود (<strong className="text-white">{state.syncId || 'الكود الذي حددته'}</strong>) واضغط <strong className="text-sky-400">"تأكيد الربط بالشبكة"</strong>.</li>
+                                <li>سيتم المزامنة والتحديث فورياً في الوقت الفعلي على جميع الشاشات.</li>
+                            </ol>
+                        </div>
+                    </Card>
                 </div>
             )}
 
@@ -473,88 +543,6 @@ const AdminDashboard: React.FC = () => {
                             ))}
                         </div>
                     </section>
-                </div>
-            )}
-
-            {activeTab === 'sync' && (
-                <div className="max-w-4xl mx-auto space-y-8 animate-in zoom-in duration-300">
-                    <h3 className="text-3xl font-bold text-white text-center mb-8">مركز الربط والمزامنة</h3>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <Card className={`p-8 border-2 transition-all ${syncMode === 'cloud' ? 'border-sky-500 bg-slate-800' : 'border-slate-700 bg-slate-800/50 hover:border-slate-500'}`} onClick={() => setSyncMode('cloud')}>
-                            <div className="bg-sky-500/10 w-16 h-16 rounded-3xl flex items-center justify-center text-sky-500 mb-6">
-                                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
-                            </div>
-                            <h4 className="text-2xl font-bold text-white mb-2">المزامنة السحابية</h4>
-                            <p className="text-slate-400 text-sm leading-relaxed mb-6">الأفضل لربط الأجهزة البعيدة أو عبر الإنترنت. سهلة الإعداد باستخدام كود قصير.</p>
-                            
-                            {syncMode === 'cloud' && (
-                                <div className="space-y-4 animate-in fade-in" onClick={e => e.stopPropagation()}>
-                                    {state.syncId || cloudSyncId ? (
-                                        <div className="bg-slate-900 p-4 rounded-xl border border-sky-500/30">
-                                            <p className="text-xs text-sky-400 font-bold mb-1">كود المزامنة الحالي (Sync ID):</p>
-                                            <div className="flex justify-between items-center">
-                                                <p className="text-xl font-mono font-bold text-white tracking-widest">{state.syncId || cloudSyncId}</p>
-                                                <button onClick={() => copyToClipboard(state.syncId || cloudSyncId)} className="text-sky-500 text-sm hover:underline">نسخ</button>
-                                            </div>
-                                        </div>
-                                    ) : null}
-
-                                    <div className="space-y-2 pt-2 border-t border-slate-700">
-                                        <label className="text-xs text-slate-400 block">ربط أجهزة الشبكة بكود قصير مخصص (مثال: <span className="text-sky-400">branch1</span> أو <span className="text-sky-400">1234</span>):</label>
-                                        <div className="flex gap-2">
-                                            <input 
-                                                value={customCode} 
-                                                onChange={e => setCustomCode(e.target.value)} 
-                                                placeholder="أدخل رمز الغرفة..."
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-sky-500"
-                                            />
-                                            <Button onClick={handleCreateCustomSync} disabled={!customCode} className="whitespace-nowrap">ربط الجهاز</Button>
-                                        </div>
-                                    </div>
-
-                                    {!state.syncId && !cloudSyncId && (
-                                        <Button className="w-full" onClick={handleEnableCloud}>توليد كود تلقائي عشوائي</Button>
-                                    )}
-                                </div>
-                            )}
-                        </Card>
-
-                        <Card className={`p-8 border-2 transition-all ${syncMode === 'local' ? 'border-green-500 bg-slate-800' : 'border-slate-700 bg-slate-800/50 hover:border-slate-500'}`} onClick={() => setSyncMode('local')}>
-                            <div className="bg-green-500/10 w-16 h-16 rounded-3xl flex items-center justify-center text-green-500 mb-6">
-                                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>
-                            </div>
-                            <h4 className="text-2xl font-bold text-white mb-2">المزامنة المحلية التلقائية</h4>
-                            <p className="text-slate-400 text-sm leading-relaxed mb-4">يتم ربط ومزامنة جميع النوافذ والأبواب المفتوحة على جهازك (الشاشة الرئيسية، الكشك، الموظفون) <span className="text-green-400 font-bold">تلقائياً وفورياً</span> بدون أي أكواد أو خطوات إضافية.</p>
-                            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-700/60 mb-6 text-xs text-slate-400 space-y-1">
-                                <p className="text-amber-400 font-bold">⚠️ ملاحظة هامة:</p>
-                                <p>في حال واجهت قيوداً من جدار الحماية (Firewall) أو متصفح البيئة السحابية تمنع الربط المحلي، يُنصح بشدة باستخدام <span className="text-sky-400 font-bold">المزامنة السحابية</span> لضمان الاستقرار الفوري.</p>
-                            </div>
-                            
-                            {syncMode === 'local' && (
-                                <div className="space-y-4 animate-in fade-in" onClick={e => e.stopPropagation()}>
-                                    {meshStatus === 'idle' ? (
-                                        <Button variant="secondary" className="w-full !bg-green-600 hover:!bg-green-700" onClick={handleStartLocalHost}>بدء الربط المحلي</Button>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            <div className="p-3 bg-slate-900 rounded-lg border border-slate-700">
-                                                <label className="text-[10px] text-green-400 block mb-1">انسخ كود العرض للجهاز الآخر:</label>
-                                                <div className="relative">
-                                                    <textarea readOnly value={offerToken} className="w-full h-20 bg-transparent text-[8px] text-white font-mono outline-none resize-none" />
-                                                    <button onClick={() => copyToClipboard(offerToken)} className="absolute bottom-0 left-0 text-[10px] text-sky-500 bg-slate-800 px-2 py-1 rounded">نسخ</button>
-                                                </div>
-                                            </div>
-                                            <div className="p-3 bg-slate-900 rounded-lg border border-slate-700">
-                                                <label className="text-[10px] text-slate-400 block mb-1">الصق كود الرد هنا:</label>
-                                                <textarea value={answerToken} onChange={(e) => setAnswerToken(e.target.value)} className="w-full h-20 bg-transparent text-[8px] text-white font-mono outline-none focus:ring-1 focus:ring-green-500" placeholder="الصق كود الرد..." />
-                                                <Button className="w-full mt-2 !py-2 !text-xs" onClick={() => completeMeshHost(answerToken)} disabled={!answerToken}>تفعيل الربط المحلي</Button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </Card>
-                    </div>
                 </div>
             )}
 
