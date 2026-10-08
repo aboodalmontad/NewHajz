@@ -1,0 +1,15 @@
+{
+  "name": "نظام الربط والطابور الذكي المحلي",
+  "short_name": "نظام الطابور المحلي",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
