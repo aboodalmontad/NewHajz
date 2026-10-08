@@ -779,6 +779,24 @@ export const LanConnectionModal: React.FC<LanConnectionModalProps> = ({
           {/* ======================================================== */}
           {activeTab === 'guide' && (
             <div className="space-y-5 text-sm text-slate-300 leading-relaxed">
+              {/* Vercel vs Local LAN warning banner */}
+              <div className="bg-amber-950/60 border border-amber-500/50 p-4 rounded-xl text-amber-200 text-xs sm:text-sm space-y-2">
+                <h4 className="font-bold text-amber-300 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>تنبيه هام حول الرفع على منصات السحاب مثل Vercel والشبكة المحلية:</span>
+                </h4>
+                <p className="leading-relaxed">
+                  منصات السحاب (مثل Vercel) تعمل على خوادم خارجية على الإنترنت، ولذلك <strong>لا يمكنها الوصول إلى أجهزة شبكتك المحلية (LAN) أو راوتر الواي فاي المنزلي/المكتبي</strong> (عناوين مثل <code>192.168.x.x</code>).
+                </p>
+                <p className="font-bold text-white mt-1">
+                  طريقة التشغيل الصحيحة على الشبكة المحلية (Wi-Fi):
+                </p>
+                <ol className="list-decimal list-inside space-y-1 text-amber-100">
+                  <li>قم بتشغيل النظام محلياً على حاسوب متصل بشبكة الواي فاي عبر الأمر <code className="bg-slate-900 px-1.5 py-0.5 rounded text-sky-300 font-mono">npm run start</code> أو <code className="bg-slate-900 px-1.5 py-0.5 rounded text-sky-300 font-mono">npm run dev</code>.</li>
+                  <li>افتح <strong>رابط الشبكة المحلية (LAN URL)</strong> الظاهر في أعلى لوحة التحكم (مثال: <code className="bg-slate-900 px-1.5 py-0.5 rounded text-sky-300 font-mono">http://192.168.1.x:3000</code>) من بقية الهواتف والشاشات المتصلة بنفس الواي فاي.</li>
+                </ol>
+              </div>
+
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <HelpCircle className="w-5 h-5 text-amber-400" />
