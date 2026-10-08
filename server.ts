@@ -79,12 +79,63 @@ function getLocalIpAddresses(): string[] {
     }
   }
 
-  // Fallback to localhost if no external LAN interface is found
   if (addresses.length === 0) {
     addresses.push('localhost');
   }
 
   return addresses;
+}
+
+// Global Device Registry (supports both WebSocket and HTTP-polling devices)
+const deviceRegistry = new Map<string, ConnectedDevice>();
+
+function getActiveDevices(): ConnectedDevice[] {
+  const now = Date.now();
+  // Prune devices not seen for more than 25 seconds
+  for (const [id, dev] of deviceRegistry.entries()) {
+    if (now - dev.lastSeen > 25000) {
+      deviceRegistry.delete(id);
+    }
+  }
+  return Array.from(deviceRegistry.values());
+}
+
+function registerOrTouchDevice(dev: ConnectedDevice, clientIp: string) {
+  const existing = deviceRegistry.get(dev.id);
+  const updated: ConnectedDevice = {
+    ...existing,
+    ...dev,
+    ip: clientIp || existing?.ip || '127.0.0.1',
+    lastSeen: Date.now(),
+    status: 'online'
+  };
+  deviceRegistry.set(dev.id, updated);
+  return updated;
+}
+
+// Rolling Event Bus for HTTP and WebSocket clients
+interface QueuedEvent {
+  id: string;
+  timestamp: number;
+  message: LanMessage;
+  targetDeviceId?: string;
+  sourceDeviceId?: string;
+}
+
+const recentEvents: QueuedEvent[] = [];
+
+function queueEvent(msg: LanMessage, targetDeviceId?: string, sourceDeviceId?: string) {
+  const evt: QueuedEvent = {
+    id: 'evt_' + Math.random().toString(36).substring(2, 9),
+    timestamp: Date.now(),
+    message: msg,
+    targetDeviceId,
+    sourceDeviceId
+  };
+  recentEvents.push(evt);
+  if (recentEvents.length > 80) {
+    recentEvents.shift();
+  }
 }
 
 async function startServer() {
@@ -94,171 +145,138 @@ async function startServer() {
   const server = createServer(app);
   const wss = new WebSocketServer({ server, path: '/ws' });
 
-  // Connected clients tracker
-  interface ClientSession {
-    ws: WebSocket;
-    device: ConnectedDevice;
-    clientIp: string;
-    lastPing: number;
-  }
-  const clients = new Map<string, ClientSession>();
+  // Map of active WebSocket connections
+  const wsSessions = new Map<WebSocket, string>(); // ws -> deviceId
 
-  function getDeviceList(): ConnectedDevice[] {
-    return Array.from(clients.values()).map(c => c.device);
-  }
-
-  function broadcast(msg: LanMessage, excludeDeviceId?: string) {
+  function broadcastWs(msg: LanMessage, excludeWs?: WebSocket) {
     const data = JSON.stringify(msg);
-    clients.forEach((client, id) => {
-      if (excludeDeviceId && id === excludeDeviceId) return;
-      if (client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(data);
+    wss.clients.forEach((client) => {
+      if (client !== excludeWs && client.readyState === WebSocket.OPEN) {
+        client.send(data);
       }
     });
   }
 
-  function sendTo(deviceId: string, msg: LanMessage): boolean {
-    const client = clients.get(deviceId);
-    if (client && client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(JSON.stringify(msg));
-      return true;
+  function sendToWs(deviceId: string, msg: LanMessage): boolean {
+    const data = JSON.stringify(msg);
+    let sent = false;
+    for (const [client, devId] of wsSessions.entries()) {
+      if (devId === deviceId && client.readyState === WebSocket.OPEN) {
+        client.send(data);
+        sent = true;
+      }
     }
-    return false;
+    return sent;
+  }
+
+  // Handle incoming message from any transport (WS or HTTP)
+  function handleIncomingLanMessage(msg: LanMessage, sourceIp: string, sourceWs?: WebSocket) {
+    switch (msg.type) {
+      case 'REGISTER_DEVICE': {
+        registerOrTouchDevice(msg.device, sourceIp);
+        queueEvent({ type: 'DEVICE_LIST', devices: getActiveDevices() });
+        broadcastWs({ type: 'DEVICE_LIST', devices: getActiveDevices() });
+        break;
+      }
+
+      case 'PING': {
+        const now = Date.now();
+        if (msg.toId) {
+          sendToWs(msg.toId, msg);
+          queueEvent(msg, msg.toId, msg.fromId);
+        } else {
+          // Ping to server
+          const pongMsg: LanMessage = {
+            type: 'PONG',
+            pingId: msg.pingId,
+            fromId: 'SERVER',
+            toId: msg.fromId,
+            originalTimestamp: msg.timestamp,
+            serverTimestamp: now
+          };
+          if (sourceWs && sourceWs.readyState === WebSocket.OPEN) {
+            sourceWs.send(JSON.stringify(pongMsg));
+          }
+          queueEvent(pongMsg, msg.fromId, 'SERVER');
+        }
+        break;
+      }
+
+      case 'PONG': {
+        sendToWs(msg.toId, msg);
+        queueEvent(msg, msg.toId, msg.fromId);
+        break;
+      }
+
+      case 'CONFIRM_REQUEST': {
+        if (msg.toDeviceId) {
+          sendToWs(msg.toDeviceId, msg);
+          queueEvent(msg, msg.toDeviceId, msg.fromDevice.id);
+        } else {
+          broadcastWs(msg, sourceWs);
+          queueEvent(msg, 'ALL', msg.fromDevice.id);
+        }
+        break;
+      }
+
+      case 'CONFIRM_RESPONSE': {
+        sendToWs(msg.toDeviceId, msg);
+        queueEvent(msg, msg.toDeviceId, msg.fromDevice.id);
+        break;
+      }
+
+      case 'STATE_UPDATE': {
+        persistState(msg.state);
+        broadcastWs(msg, sourceWs);
+        queueEvent(msg, undefined, msg.sourceDeviceId);
+        break;
+      }
+
+      case 'CALL_NOTIFICATION': {
+        broadcastWs(msg);
+        queueEvent(msg);
+        break;
+      }
+    }
   }
 
   // WebSocket connection handler
   wss.on('connection', (ws: WebSocket, req) => {
-    let currentDeviceId: string | null = null;
-    const remoteIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const rawIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const remoteIp = rawIp.replace('::ffff:', '').split(',')[0].trim();
 
     ws.on('message', (rawData: string) => {
       try {
         const msg: LanMessage = JSON.parse(rawData.toString());
-
-        switch (msg.type) {
-          case 'REGISTER_DEVICE': {
-            const dev = msg.device;
-            currentDeviceId = dev.id;
-            dev.ip = remoteIp.replace('::ffff:', '');
-            dev.lastSeen = Date.now();
-            dev.status = 'online';
-
-            clients.set(dev.id, {
-              ws,
-              device: dev,
-              clientIp: dev.ip,
-              lastPing: Date.now()
-            });
-
-            // Send full current state to newly joined client
-            ws.send(JSON.stringify({
-              type: 'STATE_UPDATE',
-              state: currentQueueState
-            }));
-
-            // Broadcast updated device list to everyone
-            const devList = getDeviceList();
-            broadcast({
-              type: 'DEVICE_LIST',
-              devices: devList
-            });
-            break;
-          }
-
-          case 'PING': {
-            const now = Date.now();
-            if (msg.toId) {
-              // Direct ping to another device
-              sendTo(msg.toId, msg);
-            } else {
-              // Ping to server/network
-              ws.send(JSON.stringify({
-                type: 'PONG',
-                pingId: msg.pingId,
-                fromId: 'SERVER',
-                toId: msg.fromId,
-                originalTimestamp: msg.timestamp,
-                serverTimestamp: now
-              }));
-            }
-            if (currentDeviceId && clients.has(currentDeviceId)) {
-              clients.get(currentDeviceId)!.lastPing = now;
-              clients.get(currentDeviceId)!.device.lastSeen = now;
-            }
-            break;
-          }
-
-          case 'PONG': {
-            // Forward pong response back to requesting device
-            sendTo(msg.toId, msg);
-            break;
-          }
-
-          case 'CONFIRM_REQUEST': {
-            // Route confirmation request to target device (or all devices if no toDeviceId)
-            if (msg.toDeviceId) {
-              sendTo(msg.toDeviceId, msg);
-            } else {
-              broadcast(msg, msg.fromDevice.id);
-            }
-            break;
-          }
-
-          case 'CONFIRM_RESPONSE': {
-            // Forward ACK back to original requester
-            sendTo(msg.toDeviceId, msg);
-            break;
-          }
-
-          case 'STATE_UPDATE': {
-            // Authoritative state update
-            persistState(msg.state);
-            broadcast(msg, msg.sourceDeviceId);
-            break;
-          }
-
-          case 'CALL_NOTIFICATION': {
-            // Broadcast customer call notification to screens & employee devices
-            broadcast(msg);
-            break;
-          }
-
-          case 'BROADCAST_CHAT': {
-            broadcast(msg);
-            break;
-          }
+        if (msg.type === 'REGISTER_DEVICE') {
+          wsSessions.set(ws, msg.device.id);
+          // Send initial state immediately
+          ws.send(JSON.stringify({
+            type: 'STATE_UPDATE',
+            state: currentQueueState
+          }));
         }
+        handleIncomingLanMessage(msg, remoteIp, ws);
       } catch (err) {
         console.error('Error handling WebSocket message:', err);
       }
     });
 
     ws.on('close', () => {
-      if (currentDeviceId && clients.has(currentDeviceId)) {
-        clients.delete(currentDeviceId);
-        broadcast({
-          type: 'DEVICE_LEFT',
-          deviceId: currentDeviceId
-        });
-        broadcast({
-          type: 'DEVICE_LIST',
-          devices: getDeviceList()
-        });
-      }
+      wsSessions.delete(ws);
     });
 
-    ws.on('error', (err) => {
-      console.warn('WebSocket client error:', err.message);
+    ws.on('error', () => {
+      wsSessions.delete(ws);
     });
   });
 
-  // REST API Endpoints
+  // REST API: Network info & health
   app.get('/api/network-info', (req, res) => {
     const localIps = getLocalIpAddresses();
     const hostHeader = req.headers.host || '';
     const protocol = req.protocol || 'http';
     
-    // Choose primary LAN IP (first non-localhost or localhost)
     const primaryIp = localIps.find(ip => ip !== 'localhost') || localIps[0] || 'localhost';
     const primaryLanUrl = hostHeader.includes(':') 
       ? `${protocol}://${primaryIp}:${PORT}` 
@@ -268,13 +286,69 @@ async function startServer() {
       localIps,
       port: PORT,
       serverTime: Date.now(),
-      connectedClientsCount: clients.size,
-      connectedDevices: getDeviceList(),
+      connectedClientsCount: getActiveDevices().length,
+      connectedDevices: getActiveDevices(),
       roomPin: currentQueueState.roomPin || '8240',
       primaryLanUrl
     });
   });
 
+  // REST API: Device registration (works across all browsers and iframes)
+  app.post('/api/register-device', (req, res) => {
+    try {
+      const dev: ConnectedDevice = req.body;
+      const rawIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+      const remoteIp = rawIp.replace('::ffff:', '').split(',')[0].trim();
+      
+      if (dev && dev.id) {
+        registerOrTouchDevice(dev, remoteIp);
+        broadcastWs({ type: 'DEVICE_LIST', devices: getActiveDevices() });
+      }
+      res.json({ success: true, devices: getActiveDevices(), state: currentQueueState });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // REST API: Poll events & state (Seamless event bus for clients when WebSocket is restricted)
+  app.get('/api/events', (req, res) => {
+    const since = parseInt(req.query.since as string, 10) || 0;
+    const deviceId = (req.query.deviceId as string) || '';
+
+    // Touch device lastSeen
+    if (deviceId && deviceRegistry.has(deviceId)) {
+      deviceRegistry.get(deviceId)!.lastSeen = Date.now();
+    }
+
+    const filtered = recentEvents.filter(e => {
+      if (e.timestamp <= since) return false;
+      if (!e.targetDeviceId || e.targetDeviceId === 'ALL') return true;
+      return e.targetDeviceId === deviceId;
+    });
+
+    res.json({
+      events: filtered.map(e => e.message),
+      devices: getActiveDevices(),
+      state: currentQueueState,
+      serverTime: Date.now()
+    });
+  });
+
+  // REST API: Dispatch event (Used by HTTP client)
+  app.post('/api/events', (req, res) => {
+    try {
+      const msg: LanMessage = req.body;
+      const rawIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+      const remoteIp = rawIp.replace('::ffff:', '').split(',')[0].trim();
+      
+      handleIncomingLanMessage(msg, remoteIp);
+      res.json({ success: true, timestamp: Date.now() });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // REST API: State endpoints
   app.get('/api/state', (_req, res) => {
     res.json(currentQueueState);
   });
@@ -284,11 +358,8 @@ async function startServer() {
       const newState = req.body;
       if (newState) {
         persistState(newState);
-        // Broadcast update via WebSocket
-        broadcast({
-          type: 'STATE_UPDATE',
-          state: newState
-        });
+        broadcastWs({ type: 'STATE_UPDATE', state: newState });
+        queueEvent({ type: 'STATE_UPDATE', state: newState });
       }
       res.json({ success: true, state: currentQueueState });
     } catch (e: any) {
@@ -296,10 +367,10 @@ async function startServer() {
     }
   });
 
-  // In Development, attach Vite middleware
+  // In Development, attach Vite middleware with HMR disabled
   if (!isProduction) {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa'
     });
     app.use(vite.middlewares);
@@ -316,13 +387,7 @@ async function startServer() {
 
   server.listen(PORT, '0.0.0.0', () => {
     const ips = getLocalIpAddresses();
-    console.log(`\n=================================================`);
     console.log(`🚀 خادم الشبكة المحلية يعمل على المنفذ: ${PORT}`);
-    console.log(`📱 عناوين الشبكة المحلية (LAN Addresses):`);
-    ips.forEach(ip => {
-      console.log(`   - http://${ip}:${PORT}`);
-    });
-    console.log(`=================================================\n`);
   });
 }
 

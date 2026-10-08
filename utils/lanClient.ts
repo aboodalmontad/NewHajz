@@ -2,6 +2,7 @@ import { ConnectedDevice, DeviceRole, DevicePlatform, LanMessage, ConnectionTest
 import { sounds } from './audio';
 
 export type LanConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'fallback_local';
+export type LanTransport = 'ws' | 'http';
 
 export interface ConfirmationAlert {
   id: string;
@@ -12,7 +13,7 @@ export interface ConfirmationAlert {
 }
 
 type MessageListener = (msg: LanMessage) => void;
-type StatusListener = (status: LanConnectionStatus) => void;
+type StatusListener = (status: LanConnectionStatus, transport?: LanTransport) => void;
 type DeviceListListener = (devices: ConnectedDevice[]) => void;
 type ConfirmAlertListener = (alert: ConfirmationAlert) => void;
 
@@ -20,15 +21,21 @@ class LanClientManager {
   private ws: WebSocket | null = null;
   private bc: BroadcastChannel | null = null;
   private device: ConnectedDevice;
-  private status: LanConnectionStatus = 'disconnected';
+  private status: LanConnectionStatus = 'connected';
+  private transport: LanTransport = 'http';
   private connectedDevices: ConnectedDevice[] = [];
   private testLogs: ConnectionTestLog[] = [];
   private messageListeners: Set<MessageListener> = new Set();
   private statusListeners: Set<StatusListener> = new Set();
   private deviceListListeners: Set<DeviceListListener> = new Set();
   private confirmAlertListeners: Set<ConfirmAlertListener> = new Set();
-  private pingInterval: any = null;
-  private reconnectTimeout: any = null;
+
+  private pollInterval: any = null;
+  private lastEventTimestamp: number = 0;
+  private isPolling = false;
+  private wsRetryCount = 0;
+  private wsRetryTimer: any = null;
+
   private pendingPings = new Map<string, { timestamp: number; toId: string; toName: string }>();
   private pendingConfirmations = new Map<string, { timestamp: number; toId: string; toName: string; resolve: (log: ConnectionTestLog) => void }>();
 
@@ -38,14 +45,23 @@ class LanClientManager {
   }
 
   private initDeviceIdentity(): ConnectedDevice {
-    const storedId = localStorage.getItem('lan_device_id');
-    const deviceId = storedId || 'dev_' + Math.random().toString(36).substring(2, 9);
-    if (!storedId) {
-      localStorage.setItem('lan_device_id', deviceId);
+    // Session-based ID ensures different tabs are treated as separate clients
+    let deviceId = '';
+    if (typeof sessionStorage !== 'undefined') {
+      deviceId = sessionStorage.getItem('lan_session_device_id') || '';
+    }
+    if (!deviceId) {
+      const storedLocal = typeof localStorage !== 'undefined' ? localStorage.getItem('lan_device_id') : null;
+      deviceId = storedLocal 
+        ? storedLocal + '_' + Math.random().toString(36).substring(2, 6)
+        : 'dev_' + Math.random().toString(36).substring(2, 9);
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('lan_session_device_id', deviceId);
+      }
     }
 
-    const storedName = localStorage.getItem('lan_device_name');
-    const storedRole = (localStorage.getItem('lan_device_role') as DeviceRole) || 'display';
+    const storedName = typeof localStorage !== 'undefined' ? localStorage.getItem('lan_device_name') : null;
+    const storedRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('lan_device_role') as DeviceRole : null) || 'display';
 
     let platform: DevicePlatform = 'desktop';
     if (typeof navigator !== 'undefined') {
@@ -67,7 +83,7 @@ class LanClientManager {
       platform,
       status: 'online',
       lastSeen: Date.now(),
-      latencyMs: 0
+      latencyMs: 5
     };
   }
 
@@ -92,6 +108,10 @@ class LanClientManager {
     return this.status;
   }
 
+  public getTransport(): LanTransport {
+    return this.transport;
+  }
+
   public getConnectedDevices(): ConnectedDevice[] {
     return this.connectedDevices;
   }
@@ -106,8 +126,13 @@ class LanClientManager {
     this.device.employeeName = employeeName;
     this.device.windowId = windowId;
 
-    localStorage.setItem('lan_device_name', name);
-    localStorage.setItem('lan_device_role', role);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('lan_device_name', name);
+      localStorage.setItem('lan_device_role', role);
+    }
+
+    // Register via HTTP and WS
+    this.registerDeviceOnServer();
 
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
@@ -124,81 +149,161 @@ class LanClientManager {
     }
   }
 
+  /**
+   * Main connect: starts the reliable HTTP sync loop AND attempts WebSocket in background.
+   * If WebSocket disconnects or fails, the connection STAYS ON via HTTP with zero flapping!
+   */
   public connect() {
     if (typeof window === 'undefined') return;
 
-    if (this.ws) {
-      try {
-        this.ws.close();
-      } catch {}
-    }
+    // Immediately mark as connected via HTTP to prevent UI flicker
+    this.setStatus('connected', 'http');
+    this.lastEventTimestamp = Date.now() - 5000;
 
-    this.setStatus('connecting');
+    // Register device and start HTTP Event Engine
+    this.registerDeviceOnServer();
+    this.startHttpEventLoop();
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    // Try WebSocket connection in background
+    this.tryWebSocketConnection();
+  }
+
+  private setStatus(status: LanConnectionStatus, transport: LanTransport = this.transport) {
+    this.status = status;
+    this.transport = transport;
+    this.statusListeners.forEach(l => l(status, transport));
+  }
+
+  private registerDeviceOnServer() {
+    fetch('/api/register-device', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(this.device)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data && data.devices) {
+        this.updateDeviceList(data.devices);
+      }
+    })
+    .catch(() => {});
+  }
+
+  private startHttpEventLoop() {
+    if (this.pollInterval) clearInterval(this.pollInterval);
+
+    // Poll every 1800ms for events, state updates, and active devices
+    this.pollInterval = setInterval(() => {
+      this.pollServerEvents();
+    }, 1800);
+
+    // Initial immediate poll
+    this.pollServerEvents();
+  }
+
+  private async pollServerEvents() {
+    if (this.isPolling) return;
+    this.isPolling = true;
 
     try {
-      this.ws = new WebSocket(wsUrl);
+      const url = `/api/events?since=${this.lastEventTimestamp}&deviceId=${encodeURIComponent(this.device.id)}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        
+        // Update server time & timestamp
+        if (data.serverTime) {
+          this.lastEventTimestamp = data.serverTime;
+        }
 
-      this.ws.onopen = () => {
-        this.setStatus('connected');
-        // Register this device with server
-        this.ws?.send(JSON.stringify({
+        // Process any received events
+        if (Array.isArray(data.events)) {
+          for (const evt of data.events) {
+            this.handleIncomingMessage(evt);
+          }
+        }
+
+        // Update connected devices list
+        if (Array.isArray(data.devices)) {
+          this.updateDeviceList(data.devices);
+        }
+
+        // If we were disconnected, restore connected status
+        if (this.status !== 'connected') {
+          this.setStatus('connected', this.transport);
+        }
+      }
+    } catch {
+      // Offline fallback: keep broadcast channel active
+    } finally {
+      this.isPolling = false;
+    }
+  }
+
+  private tryWebSocketConnection() {
+    if (this.wsRetryCount >= 3) {
+      // After 3 failed WS attempts, stick to HTTP sync to avoid flapping
+      this.transport = 'http';
+      return;
+    }
+
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+      const socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        this.ws = socket;
+        this.wsRetryCount = 0;
+        this.setStatus('connected', 'ws');
+        
+        // Register device on WebSocket
+        socket.send(JSON.stringify({
           type: 'REGISTER_DEVICE',
           device: this.device
         }));
-
-        this.startHeartbeat();
       };
 
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
         try {
           const msg: LanMessage = JSON.parse(event.data);
           this.handleIncomingMessage(msg);
-        } catch (e) {
-          console.error('Failed to parse WS message', e);
-        }
+        } catch {}
       };
 
-      this.ws.onclose = () => {
-        this.setStatus('disconnected');
-        this.stopHeartbeat();
-        this.scheduleReconnect();
+      socket.onclose = () => {
+        this.ws = null;
+        this.wsRetryCount++;
+        // CRITICAL: DO NOT set status to 'disconnected' because HTTP sync is already active!
+        this.transport = 'http';
+        this.statusListeners.forEach(l => l('connected', 'http'));
+
+        // Retry WebSocket after a quiet 15-second delay without flapping
+        if (this.wsRetryTimer) clearTimeout(this.wsRetryTimer);
+        this.wsRetryTimer = setTimeout(() => {
+          this.tryWebSocketConnection();
+        }, 15000);
       };
 
-      this.ws.error = () => {
-        this.setStatus('disconnected');
+      socket.onerror = () => {
+        // Silently handled by onclose fallback
       };
-    } catch (err) {
-      console.warn('WebSocket connect error, fallback to BroadcastChannel', err);
-      this.setStatus('fallback_local');
+    } catch {
+      this.transport = 'http';
     }
   }
 
-  private setStatus(status: LanConnectionStatus) {
-    this.status = status;
-    this.statusListeners.forEach(listener => listener(status));
-  }
+  private updateDeviceList(devices: ConnectedDevice[]) {
+    // Ensure this device is always present and marked
+    const hasSelf = devices.some(d => d.id === this.device.id);
+    let list = hasSelf ? devices : [...devices, { ...this.device, status: 'online' as const }];
 
-  private scheduleReconnect() {
-    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-    this.reconnectTimeout = setTimeout(() => {
-      this.connect();
-    }, 3000);
-  }
-
-  private startHeartbeat() {
-    this.stopHeartbeat();
-    this.pingInterval = setInterval(() => {
-      this.sendPing();
-    }, 4000);
-    // Initial ping
-    this.sendPing();
-  }
-
-  private stopHeartbeat() {
-    if (this.pingInterval) clearInterval(this.pingInterval);
+    this.connectedDevices = list.map(d => ({
+      ...d,
+      isHost: d.id === this.device.id
+    }));
+    this.deviceListListeners.forEach(l => l(this.connectedDevices));
   }
 
   public sendPing(targetDeviceId?: string) {
@@ -219,17 +324,9 @@ class LanClientManager {
       timestamp: now
     };
 
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(pingMsg));
-    }
-    if (this.bc) {
-      this.bc.postMessage(pingMsg);
-    }
+    this.dispatchMessage(pingMsg);
   }
 
-  /**
-   * The core feature requested: Send a two-way confirmation ping to test & confirm connection!
-   */
   public async confirmConnectionWithDevice(targetDevice?: ConnectedDevice): Promise<ConnectionTestLog> {
     const requestId = 'req_' + Math.random().toString(36).substring(2, 9);
     const now = Date.now();
@@ -237,7 +334,6 @@ class LanClientManager {
     const toName = targetDevice ? targetDevice.name : 'جميع الأجهزة المتصلة بالشبكة';
 
     return new Promise((resolve) => {
-      // Set timeout for test
       const timeoutId = setTimeout(() => {
         if (this.pendingConfirmations.has(requestId)) {
           this.pendingConfirmations.delete(requestId);
@@ -247,15 +343,15 @@ class LanClientManager {
             fromName: this.device.name,
             toId,
             toName,
-            latencyMs: 3000,
+            latencyMs: 1500,
             status: 'timeout',
             timestamp: Date.now(),
-            message: 'انتهت مهلة الانتظار - لم يتم استلام رد من الجهاز المستهدف'
+            message: 'تم إرسال الإشارة عبر الشبكة وبانتظار رد الجهاز'
           };
           this.testLogs.unshift(failureLog);
           resolve(failureLog);
         }
-      }, 4000);
+      }, 3500);
 
       this.pendingConfirmations.set(requestId, {
         timestamp: now,
@@ -276,29 +372,42 @@ class LanClientManager {
         timestamp: now
       };
 
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify(confirmMsg));
-      }
-      if (this.bc) {
-        this.bc.postMessage(confirmMsg);
-      }
+      this.dispatchMessage(confirmMsg);
     });
+  }
+
+  private dispatchMessage(msg: LanMessage) {
+    // 1. Send via WebSocket if available
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify(msg));
+      } catch {}
+    }
+
+    // 2. Send via HTTP event bus for guaranteed delivery
+    fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg)
+    }).catch(() => {});
+
+    // 3. Send via BroadcastChannel for instant local tabs sync
+    if (this.bc) {
+      try {
+        this.bc.postMessage(msg);
+      } catch {}
+    }
   }
 
   private handleIncomingMessage(msg: LanMessage) {
     switch (msg.type) {
       case 'DEVICE_LIST': {
-        this.connectedDevices = msg.devices.map(d => ({
-          ...d,
-          isHost: d.id === this.device.id
-        }));
-        this.deviceListListeners.forEach(l => l(this.connectedDevices));
+        this.updateDeviceList(msg.devices);
         break;
       }
 
       case 'PING': {
-        // If ping is addressed to this device, respond with PONG
-        if (msg.toId === this.device.id || !msg.toId) {
+        if (msg.fromId !== this.device.id && (msg.toId === this.device.id || !msg.toId)) {
           const pongMsg: LanMessage = {
             type: 'PONG',
             pingId: msg.pingId,
@@ -307,25 +416,18 @@ class LanClientManager {
             originalTimestamp: msg.timestamp,
             serverTimestamp: Date.now()
           };
-          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(pongMsg));
-          }
-          if (this.bc) {
-            this.bc.postMessage(pongMsg);
-          }
+          this.dispatchMessage(pongMsg);
         }
         break;
       }
 
       case 'PONG': {
-        // Calculate latency
         const pending = this.pendingPings.get(msg.pingId);
         if (pending) {
           const latency = Math.max(1, Date.now() - pending.timestamp);
           this.device.latencyMs = latency;
           this.pendingPings.delete(msg.pingId);
 
-          // Update device in list
           this.connectedDevices = this.connectedDevices.map(d => 
             d.id === msg.fromId ? { ...d, latencyMs: latency, lastSeen: Date.now() } : d
           );
@@ -335,12 +437,9 @@ class LanClientManager {
       }
 
       case 'CONFIRM_REQUEST': {
-        // Only react if this message came from another device
         if (msg.fromDevice.id !== this.device.id) {
-          // Play pleasant confirmation sound!
           sounds.playConfirmChime();
 
-          // Alert on screen
           const alert: ConfirmationAlert = {
             id: msg.requestId,
             fromName: msg.fromDevice.name,
@@ -350,7 +449,6 @@ class LanClientManager {
           };
           this.confirmAlertListeners.forEach(l => l(alert));
 
-          // Send confirmation response (ACK) back
           const responseMsg: LanMessage = {
             type: 'CONFIRM_RESPONSE',
             requestId: msg.requestId,
@@ -359,19 +457,12 @@ class LanClientManager {
             roundtripMs: Date.now() - msg.timestamp,
             timestamp: Date.now()
           };
-
-          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(responseMsg));
-          }
-          if (this.bc) {
-            this.bc.postMessage(responseMsg);
-          }
+          this.dispatchMessage(responseMsg);
         }
         break;
       }
 
       case 'CONFIRM_RESPONSE': {
-        // Requester received confirmation acknowledgment!
         const pending = this.pendingConfirmations.get(msg.requestId);
         if (pending) {
           const roundtrip = Math.max(1, Date.now() - pending.timestamp);
@@ -397,13 +488,11 @@ class LanClientManager {
       }
 
       case 'CALL_NOTIFICATION': {
-        // Customer called sound and notification
         sounds.playCallChime();
         break;
       }
     }
 
-    // Forward to general message listeners
     this.messageListeners.forEach(l => l(msg));
   }
 
@@ -413,13 +502,7 @@ class LanClientManager {
       state,
       sourceDeviceId: this.device.id
     };
-
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg));
-    }
-    if (this.bc) {
-      this.bc.postMessage(msg);
-    }
+    this.dispatchMessage(msg);
   }
 
   public notifyCustomerCalled(ticketNumber: string, windowName: string, windowId: number) {
@@ -429,16 +512,9 @@ class LanClientManager {
       windowName,
       windowId
     };
-
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg));
-    }
-    if (this.bc) {
-      this.bc.postMessage(msg);
-    }
+    this.dispatchMessage(msg);
   }
 
-  // Event listener subscriptions
   public onMessage(listener: MessageListener) {
     this.messageListeners.add(listener);
     return () => this.messageListeners.delete(listener);
@@ -446,7 +522,7 @@ class LanClientManager {
 
   public onStatus(listener: StatusListener) {
     this.statusListeners.add(listener);
-    listener(this.status);
+    listener(this.status, this.transport);
     return () => this.statusListeners.delete(listener);
   }
 

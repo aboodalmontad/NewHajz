@@ -53,7 +53,7 @@ export const useQueueSystem = () => {
 export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<QueueSystemState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [lanStatus, setLanStatus] = useState<LanConnectionStatus>('disconnected');
+  const [lanStatus, setLanStatus] = useState<LanConnectionStatus>(lanClient.getStatus());
   const [connectedDevices, setConnectedDevices] = useState<ConnectedDevice[]>([]);
   const [testLogs, setTestLogs] = useState<ConnectionTestLog[]>([]);
   const [confirmAlert, setConfirmAlert] = useState<ConfirmationAlert | null>(null);

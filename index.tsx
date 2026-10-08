@@ -3,19 +3,20 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// معالج أخطاء عالمي لتشخيص الأخطاء غير المتوقعة (مع استثناء أخطاء Vite HMR الطبيعية عند تشغيل الخادم)
+// معالج أخطاء عالمي لتشخيص الأخطاء غير المتوقعة
 window.addEventListener('error', (event) => {
-  const msg = (event && event.message) || '';
+  const msg = event?.message || '';
   if (msg.includes('WebSocket') || msg.includes('closed without opened')) {
+    event.preventDefault();
     return;
   }
   console.error('Global Uncaught Error:', event.error);
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  const reason = event.reason;
-  const msg = (reason && (reason.message || reason.stack || String(reason))) || '';
-  if (msg.includes('WebSocket') || msg.includes('closed without opened') || msg.includes('vite:ws')) {
+  const reasonStr = event?.reason?.message || String(event?.reason || '');
+  // Ignore WebSocket HMR/closed errors per environment instructions
+  if (reasonStr.includes('WebSocket') || reasonStr.includes('closed without opened')) {
     event.preventDefault();
     return;
   }
