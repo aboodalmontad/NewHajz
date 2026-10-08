@@ -189,16 +189,16 @@ export const EmployeeChat: React.FC<EmployeeChatProps> = ({ employee, windowData
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick reply shortcuts */}
-          <div className="px-4 py-2 bg-slate-900 border-t border-slate-800 overflow-x-auto">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap shrink-0">ردود سريعة:</span>
+          {/* Quick reply shortcuts - Ultra Compact */}
+          <div className="px-3 py-1.5 bg-slate-900/90 border-t border-slate-800/80 overflow-x-auto">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap shrink-0">ردود سريعة:</span>
               <div className="flex gap-1.5">
                 {QUICK_EMPLOYEE_REPLIES.map((reply, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleSendMessage(reply)}
-                    className="text-xs bg-slate-800 hover:bg-sky-500/20 hover:text-sky-300 text-slate-300 border border-slate-700 hover:border-sky-500/40 px-3 py-1.5 rounded-xl whitespace-nowrap transition cursor-pointer shrink-0"
+                    className="text-[11px] bg-slate-800 hover:bg-sky-500/20 hover:text-sky-300 text-slate-300 border border-slate-700 hover:border-sky-500/40 px-2 py-0.5 rounded-lg whitespace-nowrap transition cursor-pointer shrink-0"
                   >
                     {reply}
                   </button>
@@ -207,28 +207,41 @@ export const EmployeeChat: React.FC<EmployeeChatProps> = ({ employee, windowData
             </div>
           </div>
 
-          {/* Message Input Form */}
+          {/* Message Input Form - Compact Sleek Design */}
           <form 
             onSubmit={(e) => {
               e.preventDefault();
               handleSendMessage();
             }}
-            className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2"
+            className="p-2 sm:p-2.5 bg-slate-900/95 border-t border-slate-800 flex items-center gap-1.5 sm:gap-2"
           >
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="اكتب رسالتك للمدير هنا..."
-              className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
-            />
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="اكتب رسالتك للمدير هنا..."
+                className="w-full bg-slate-950 border border-slate-700/80 hover:border-slate-600 focus:border-sky-500 rounded-lg sm:rounded-xl px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 transition-colors pr-3 pl-8"
+              />
+              {inputText && (
+                <button
+                  type="button"
+                  onClick={() => setInputText('')}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-full text-xs cursor-pointer"
+                  title="مسح النص"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="bg-sky-500 hover:bg-sky-600 disabled:opacity-40 disabled:hover:bg-sky-500 text-white font-bold px-5 py-3 rounded-xl transition flex items-center gap-1.5 cursor-pointer text-sm shadow-md shadow-sky-500/20 shrink-0"
+              className="bg-sky-500 hover:bg-sky-600 disabled:opacity-40 disabled:hover:bg-sky-500 text-white font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition flex items-center gap-1 cursor-pointer text-xs sm:text-sm shadow-sm shrink-0 h-[34px] sm:h-[38px]"
+              title="إرسال الرسالة"
             >
               <span>إرسال</span>
-              <span>➤</span>
+              <span className="text-xs">➤</span>
             </button>
           </form>
         </div>
