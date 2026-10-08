@@ -74,8 +74,39 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
     const isReadyToServe = employee.status === EmployeeStatus.Available && assignedWindow;
     const isServing = employee.status === EmployeeStatus.Busy && assignedWindow && currentCustomer;
 
+    const winId = assignedWindow?.id || employee.windowId;
+    const latestManagerNotes = useMemo(() => {
+        const msgs = state?.chatMessages || [];
+        return msgs.filter(m => 
+            m.senderType === 'admin' && (m.text.startsWith('📢 [تعميم') || (winId && Number(m.windowId) === Number(winId)))
+        ).slice(-6).reverse();
+    }, [state?.chatMessages, winId]);
+
     return (
         <div className="max-w-4xl mx-auto space-y-6">
+            {/* Horizontal Ticker / Announcement Bar for Manager Guidance */}
+            {latestManagerNotes.length > 0 && (
+                <div className="bg-slate-850 border border-amber-500/30 rounded-2xl p-2.5 sm:p-3 flex items-center justify-between gap-3 shadow-md overflow-hidden">
+                    <div className="flex items-center gap-2 shrink-0 text-amber-400 font-bold text-xs">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                        <span>📢 شريط استعراض التوجيهات:</span>
+                    </div>
+                    <div className="flex-1 overflow-x-auto custom-scrollbar flex items-center gap-2.5 py-1">
+                        {latestManagerNotes.map((note) => (
+                            <div 
+                                key={note.id} 
+                                className="bg-slate-900 border border-amber-500/20 px-3 py-1 rounded-xl text-xs text-amber-200 whitespace-nowrap shrink-0 flex items-center gap-1.5 shadow-xs"
+                            >
+                                <span className="text-white font-medium">{note.text}</span>
+                                <span className="text-[10px] text-amber-400/80 font-mono">
+                                    ({new Date(note.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })})
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             <Card className="bg-slate-800 p-8 text-center border border-slate-700">
                 <h2 className="text-3xl font-bold text-sky-400">أهلاً بك، {employee.name}</h2>
                 <p className={`mt-2 text-lg font-semibold ${employee.status === EmployeeStatus.Available ? 'text-green-400' : 'text-yellow-400'}`}>

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
-import { Window } from '../types';
 import { Button } from './shared/Button';
 import { Modal } from './shared/Modal';
 
@@ -10,11 +9,11 @@ interface AdminChatProps {
 
 const QUICK_ADMIN_MESSAGES = [
   'يرجى تسريع وتيرة الخدمة ⏱️',
-  'عميل VIP قادم إليك، يرجى الاهتمام ⭐',
-  'استراحة قصيرة مسموحة بعد 10 دقائق ☕',
-  'هل تواجه أي مشكلة فنية أو تحتاج مساعدة؟ ❓',
-  'يرجى تحويل المعاملة التالية للإدارة 📑',
-  'عمل ممتاز اليوم، استمروا في هذا الأداء 👍'
+  'عميل VIP قادم إليك ⭐',
+  'استراحة قصيرة 10 دقائق ☕',
+  'هل تحتاج مساعدة؟ ❓',
+  'تحويل المعاملة للإدارة 📑',
+  'عمل ممتاز استمروا 👍'
 ];
 
 export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
@@ -32,6 +31,10 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
   const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [browseOrientation, setBrowseOrientation] = useState<'vertical' | 'horizontal'>('vertical');
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -39,7 +42,26 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
   const employees = state?.employees || [];
   const allMessages = state?.chatMessages || [];
 
-  // Select initial window or first window if available
+  // Lock body scroll in full screen mode and support Escape key
+  useEffect(() => {
+    if (!isFullScreen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFullScreen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFullScreen]);
+
+  // Select initial window or first available
   useEffect(() => {
     if (initialWindowId && windows.some(w => Number(w.id) === Number(initialWindowId))) {
       setSelectedWindowId(Number(initialWindowId));
@@ -49,27 +71,36 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
     }
   }, [initialWindowId, windows]);
 
-  // Mark messages for the selected window as read by admin
+  // Mark messages as read by admin when window is selected
   useEffect(() => {
     if (selectedWindowId) {
       markChatMessagesAsRead(selectedWindowId, 'admin');
     }
   }, [selectedWindowId, allMessages.length, markChatMessagesAsRead]);
 
-  // Auto scroll to bottom of messages container
+  // Scroll to latest message
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior });
+    if (browseOrientation === 'horizontal') {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTo({
+          left: messagesContainerRef.current.scrollWidth,
+          behavior
+        });
+      }
+    } else {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior });
+      }
     }
   };
 
   useEffect(() => {
     scrollToBottom('auto');
-  }, [selectedWindowId]);
+  }, [selectedWindowId, browseOrientation]);
 
   useEffect(() => {
     scrollToBottom('smooth');
-  }, [allMessages]);
+  }, [allMessages.length]);
 
   const selectedWindow = windows.find(w => Number(w.id) === Number(selectedWindowId));
   const selectedWindowEmployee = selectedWindow 
@@ -96,7 +127,7 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
     return counts;
   }, [allMessages]);
 
-  const totalUnreadForAdmin = Object.values(unreadCountByWindow).reduce((a, b) => a + b, 0);
+  const totalUnread = Object.values(unreadCountByWindow).reduce((a, b) => a + b, 0);
 
   // Filter windows by search query
   const filteredWindows = useMemo(() => {
@@ -106,7 +137,6 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
       const emp = employees.find(e => Number(e.windowId) === Number(win.id) || Number(e.id) === Number(win.employeeId));
       return (
         win.name.toLowerCase().includes(q) ||
-        (win.customTask && win.customTask.toLowerCase().includes(q)) ||
         (emp && emp.name.toLowerCase().includes(q)) ||
         win.id.toString().includes(q)
       );
@@ -117,7 +147,7 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
     const text = (textToSend || inputText).trim();
     if (!text || !selectedWindowId) return;
 
-    await sendChatMessage(selectedWindowId, 'admin', 'المدير / الإدارة', text);
+    await sendChatMessage(selectedWindowId, 'admin', 'المدير العام', text);
     setInputText('');
     setTimeout(() => scrollToBottom('smooth'), 100);
   };
@@ -131,9 +161,15 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
 
   const handleClearCurrent = async () => {
     if (!selectedWindowId) return;
-    if (window.confirm(`هل أنت متأكد من مسح سجل محادثة ${selectedWindow?.name}؟`)) {
+    if (window.confirm(`مسح محادثة ${selectedWindow?.name}؟`)) {
       await clearChatHistory(selectedWindowId);
     }
+  };
+
+  const handleCopyMessage = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMsgId(id);
+    setTimeout(() => setCopiedMsgId(null), 1500);
   };
 
   const formatTime = (ts: number) => {
@@ -143,90 +179,116 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
 
   if (windows.length === 0) {
     return (
-      <div className="bg-slate-800 p-12 rounded-2xl border border-slate-700 text-center text-slate-400">
-        <span className="text-5xl mb-4 block">🏢</span>
-        <h4 className="text-xl font-bold text-white mb-2">لا توجد شبابيك خدمة مضافة</h4>
-        <p className="text-sm">يرجى إضافة شبابيك خدمة أولاً من تبويب "إدارة النظام" لبدء التواصل معها.</p>
+      <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 text-center text-slate-400">
+        <span className="text-4xl mb-3 block">🏢</span>
+        <h4 className="text-lg font-bold text-white mb-1">لا توجد شبابيك خدمة</h4>
+        <p className="text-sm">أضف شبابيك خدمة أولاً للتواصل معها.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-900 rounded-2xl border border-slate-700/80 shadow-2xl overflow-hidden flex flex-col h-[calc(100vh-220px)] min-h-[580px] max-h-[820px]">
+    <div className={`bg-slate-900 border border-slate-800 shadow-xl overflow-hidden flex flex-col transition-all ${
+      isFullScreen 
+        ? 'fixed inset-0 z-50 rounded-none h-screen w-screen p-3 sm:p-5 bg-slate-950/95' 
+        : 'rounded-2xl h-[560px] sm:h-[620px]'
+    }`}>
       
-      {/* TOP BAR / HEADER */}
-      <div className="bg-slate-850 px-5 py-3 border-b border-slate-700 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center text-xl font-bold border border-sky-500/30">
-            💬
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-extrabold text-white">مركز المحادثة المباشرة مع الشبابيك</h2>
-              {totalUnreadForAdmin > 0 && (
-                <span className="bg-rose-500 text-white text-xs font-black px-2 py-0.5 rounded-full animate-pulse shadow-sm">
-                  {totalUnreadForAdmin} رسالة غير مقروءة
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-400">تواصل لحظي وسريع على الشبكة المحلية بين الإدارة وكافة الموظفين</p>
-          </div>
+      {/* SIMPLE HEADER BAR */}
+      <div className="bg-slate-850 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xl">💬</span>
+          <h2 className="font-bold text-sm text-white">محادثة الشبابيك</h2>
+          {totalUnread > 0 && (
+            <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">
+              {totalUnread} جديدة
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Orientation Toggle (Vertical / Horizontal) */}
+          <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setBrowseOrientation('vertical')}
+              className={`px-2 py-1 rounded font-bold transition cursor-pointer ${
+                browseOrientation === 'vertical' 
+                  ? 'bg-sky-500 text-white shadow-xs' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="عرض عمودي"
+            >
+              ↕ عمودي
+            </button>
+            <button
+              type="button"
+              onClick={() => setBrowseOrientation('horizontal')}
+              className={`px-2 py-1 rounded font-bold transition cursor-pointer ${
+                browseOrientation === 'horizontal' 
+                  ? 'bg-sky-500 text-white shadow-xs' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="عرض أفقي"
+            >
+              ↔ أفقي
+            </button>
+          </div>
+
+          {/* Broadcast Button */}
           <button
+            type="button"
             onClick={() => setIsBroadcastModalOpen(true)}
-            className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black text-xs py-2 px-3.5 rounded-xl transition flex items-center gap-2 shadow-md shadow-amber-500/10 cursor-pointer"
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs py-1.5 px-2.5 sm:px-3 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-sm"
+            title="إرسال تعميم لجميع الشبابيك"
           >
             <span>📢</span>
-            <span className="hidden sm:inline">إرسال تعميم للجميع</span>
+            <span className="hidden sm:inline">تعميم للجميع</span>
             <span className="sm:hidden">تعميم</span>
+          </button>
+
+          {/* Fullscreen Button */}
+          <button
+            type="button"
+            onClick={() => setIsFullScreen(!isFullScreen)}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs py-1.5 px-2.5 rounded-lg transition cursor-pointer flex items-center gap-1"
+            title={isFullScreen ? 'تصغير' : 'ملء الشاشة'}
+          >
+            <span>{isFullScreen ? '✕' : '⛶'}</span>
+            <span className="hidden md:inline">{isFullScreen ? 'تصغير' : 'ملء الشاشة'}</span>
           </button>
         </div>
       </div>
 
-      {/* MAIN DUAL-PANE CONTAINER */}
+      {/* MAIN TWO-PANE BODY */}
       <div className="flex-1 flex overflow-hidden">
 
         {/* SIDEBAR: WINDOWS LIST */}
-        <div className={`w-full md:w-80 lg:w-96 border-l border-slate-800 bg-slate-900 flex flex-col shrink-0 ${
+        <div className={`w-full md:w-72 lg:w-80 border-l border-slate-800 bg-slate-900/90 flex flex-col shrink-0 ${
           mobileView === 'chat' ? 'hidden md:flex' : 'flex'
         }`}>
-          {/* Search Input */}
-          <div className="p-3 border-b border-slate-800">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ابحث عن شباك أو موظف..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute left-2.5 top-2 text-xs text-slate-400 hover:text-white"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+          {/* Simple Search */}
+          <div className="p-2 border-b border-slate-800">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="🔍 بحث عن شباك..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+            />
           </div>
 
           {/* Windows Scrollable List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/80">
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
             {filteredWindows.length === 0 ? (
-              <div className="p-6 text-center text-slate-500 text-xs">
-                لا توجد شبابيك مطابقة للبحث
+              <div className="p-4 text-center text-slate-500 text-xs">
+                لا توجد شبابيك مطابقة
               </div>
             ) : (
               filteredWindows.map(win => {
                 const isSelected = Number(win.id) === Number(selectedWindowId);
                 const emp = employees.find(e => Number(e.windowId) === Number(win.id) || Number(e.id) === Number(win.employeeId));
-                const winMessages = allMessages.filter(m => Number(m.windowId) === Number(win.id));
-                const lastMsg = winMessages[winMessages.length - 1];
                 const unread = unreadCountByWindow[Number(win.id)] || 0;
-                const isOnline = !!emp;
 
                 return (
                   <button
@@ -235,58 +297,36 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
                       setSelectedWindowId(Number(win.id));
                       setMobileView('chat');
                     }}
-                    className={`w-full text-right p-3.5 transition-all flex items-start gap-3 cursor-pointer ${
+                    className={`w-full text-right p-3 transition flex items-center gap-2.5 cursor-pointer ${
                       isSelected 
-                        ? 'bg-sky-500/15 border-r-4 border-sky-400' 
-                        : 'hover:bg-slate-800/60'
+                        ? 'bg-sky-500/15 border-r-3 border-sky-400 text-white' 
+                        : 'hover:bg-slate-800/50 text-slate-300'
                     }`}
                   >
-                    {/* Window avatar & online dot */}
-                    <div className="relative mt-1 shrink-0">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
-                        isSelected 
-                          ? 'bg-sky-500 text-white shadow-md shadow-sky-500/30' 
-                          : 'bg-slate-800 text-slate-300 border border-slate-700'
-                      }`}>
-                        {win.id}
-                      </div>
-                      <span className={`absolute -bottom-0.5 -left-0.5 w-3 h-3 rounded-full border-2 border-slate-900 ${
-                        isOnline ? 'bg-emerald-500' : 'bg-slate-600'
-                      }`} title={isOnline ? 'الموظف متواجد' : 'الشباك شاغر'}></span>
+                    {/* Window badge */}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
+                      isSelected 
+                        ? 'bg-sky-500 text-white shadow-sm' 
+                        : 'bg-slate-800 text-slate-300 border border-slate-700'
+                    }`}>
+                      {win.id}
                     </div>
 
-                    {/* Window Info */}
+                    {/* Window Name & Employee */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={`font-bold text-sm truncate ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs truncate">
                           {win.name}
                         </span>
-                        {lastMsg && (
-                          <span className="text-[10px] text-slate-500 shrink-0 mr-1 font-mono">
-                            {formatTime(lastMsg.timestamp)}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className={`text-[11px] truncate ${emp ? 'text-emerald-400 font-medium' : 'text-slate-500'}`}>
-                          {emp ? `الموظف: ${emp.name}` : 'الشباك شاغر حالياً'}
-                        </span>
                         {unread > 0 && (
-                          <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shrink-0">
-                            {unread} جديدة
+                          <span className="bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                            {unread}
                           </span>
                         )}
                       </div>
-
-                      {lastMsg ? (
-                        <p className="text-[11px] text-slate-400 truncate">
-                          <span className="text-slate-500">{lastMsg.senderType === 'admin' ? 'أنت: ' : ''}</span>
-                          {lastMsg.text}
-                        </p>
-                      ) : (
-                        <p className="text-[10px] text-slate-600 italic">لا توجد رسائل سابقة</p>
-                      )}
+                      <p className={`text-[11px] truncate mt-0.5 ${emp ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        {emp ? `👤 ${emp.name}` : '⚪ شباك شاغر'}
+                      </p>
                     </div>
                   </button>
                 );
@@ -296,72 +336,99 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
         </div>
 
         {/* CHAT CONVERSATION VIEW */}
-        <div className={`flex-1 flex flex-col bg-slate-950/60 min-w-0 ${
+        <div className={`flex-1 flex flex-col bg-slate-950 min-w-0 ${
           mobileView === 'list' ? 'hidden md:flex' : 'flex'
         }`}>
           {selectedWindow ? (
             <>
-              {/* Conversation Top Header */}
-              <div className="p-3.5 sm:p-4 border-b border-slate-800 bg-slate-900 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  {/* Mobile Back Button */}
+              {/* Simple Chat Header */}
+              <div className="px-3 py-2 border-b border-slate-800 bg-slate-900 flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  {/* Back to list on mobile */}
                   <button
+                    type="button"
                     onClick={() => setMobileView('list')}
-                    className="md:hidden p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer shrink-0"
-                    title="العودة لقائمة الشبابيك"
+                    className="md:hidden text-xs text-sky-400 hover:text-white px-2 py-1 rounded bg-slate-800"
                   >
-                    <span>←</span>
-                    <span>الشبابيك</span>
+                    ← الشبابيك
                   </button>
-
-                  <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center font-black text-base shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center font-bold text-xs shrink-0">
                     {selectedWindow.id}
                   </div>
-
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-extrabold text-white text-base truncate">{selectedWindow.name}</h3>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        selectedWindowEmployee 
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
-                          : 'bg-slate-800 text-slate-400 border-slate-700'
-                      }`}>
-                        {selectedWindowEmployee ? `الموظف المناوب: ${selectedWindowEmployee.name}` : 'الشباك شاغر'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">
-                      التخصص: {selectedWindow.customTask || 'خدمات عامة'}
-                    </p>
+                    <h3 className="font-bold text-white text-xs sm:text-sm truncate">
+                      {selectedWindow.name}
+                    </h3>
+                    <span className="text-[10px] text-slate-400 block truncate">
+                      {selectedWindowEmployee ? `الموظف: ${selectedWindowEmployee.name}` : 'شباك شاغر'}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={handleClearCurrent}
-                    title="مسح سجل محادثة هذا الشباك"
-                    className="text-xs text-slate-400 hover:text-rose-400 bg-slate-800 hover:bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-xl transition cursor-pointer"
-                  >
-                    مسح السجل
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleClearCurrent}
+                  title="مسح سجل المحادثة"
+                  className="text-[11px] text-slate-400 hover:text-rose-400 bg-slate-800/80 hover:bg-slate-800 border border-slate-700 px-2 py-1 rounded transition cursor-pointer"
+                >
+                  مسح السجل
+                </button>
               </div>
 
-              {/* Messages Body */}
+              {/* Messages Area with High Visibility Scrollbar */}
               <div 
                 ref={messagesContainerRef}
-                className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4"
+                className={`flex-1 ${
+                  browseOrientation === 'horizontal'
+                    ? 'overflow-x-auto overflow-y-hidden p-3 sm:p-4 flex items-stretch gap-2.5'
+                    : 'overflow-y-auto p-3 sm:p-4 space-y-3'
+                }`}
               >
                 {currentWindowMessages.length === 0 ? (
-                  <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center p-6 text-slate-500">
-                    <div className="w-16 h-16 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center text-3xl mb-3 text-sky-400">
-                      💬
-                    </div>
-                    <p className="text-base font-bold text-slate-200">لا توجد رسائل سابقة مع {selectedWindow.name}</p>
-                    <p className="text-xs text-slate-400 mt-1.5 max-w-sm leading-relaxed">
-                      ابدأ المحادثة الآن بإرسال رسالة أو اضغط على أحد التوجيهات السريعة أدناه لتصل فوراً لموظف الشباك.
-                    </p>
+                  <div className="h-full w-full flex flex-col items-center justify-center text-center p-4 text-slate-500">
+                    <span className="text-3xl mb-2">💬</span>
+                    <p className="text-sm font-bold text-slate-300">لا توجد رسائل مع {selectedWindow.name}</p>
+                    <p className="text-xs text-slate-500 mt-1">أرسل رسالة أو اختر توجيهاً سريعاً من الأسفل.</p>
                   </div>
+                ) : browseOrientation === 'horizontal' ? (
+                  /* Horizontal mode */
+                  currentWindowMessages.map(msg => {
+                    const isAdmin = msg.senderType === 'admin';
+                    const isBroadcast = msg.text.startsWith('📢 [تعميم');
+
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`w-[230px] sm:w-[280px] shrink-0 rounded-xl p-3 shadow-md flex flex-col justify-between border ${
+                          isBroadcast
+                            ? 'bg-amber-500/20 text-white border-amber-500/40'
+                            : isAdmin 
+                              ? 'bg-sky-600/90 text-white border-sky-400/50' 
+                              : 'bg-slate-800 text-slate-100 border-slate-700'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-1.5 text-[10px] text-slate-300">
+                            <span className="font-bold">{isAdmin ? 'الإدارة' : msg.senderName}</span>
+                            <span className="font-mono">{formatTime(msg.timestamp)}</span>
+                          </div>
+                          <p className="text-xs leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                        </div>
+                        <div className="flex justify-between items-center mt-2 pt-1 border-t border-white/10 text-[10px]">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyMessage(msg.id, msg.text)}
+                            className="text-slate-300 hover:text-white cursor-pointer"
+                          >
+                            {copiedMsgId === msg.id ? 'تم النسخ ✓' : 'نسخ'}
+                          </button>
+                          <span>{isAdmin ? (msg.readByWindow ? '✓✓ مقروءة' : '✓ مرسلة') : ''}</span>
+                        </div>
+                      </div>
+                    );
+                  })
                 ) : (
+                  /* Vertical mode */
                   currentWindowMessages.map(msg => {
                     const isAdmin = msg.senderType === 'admin';
                     const isBroadcast = msg.text.startsWith('📢 [تعميم');
@@ -371,29 +438,29 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
                         key={msg.id}
                         className={`flex flex-col ${isAdmin ? 'items-start' : 'items-end'}`}
                       >
-                        {/* Sender Name & Time */}
-                        <div className="flex items-center gap-1.5 mb-1 text-[11px] text-slate-400">
-                          <span className={`font-bold ${isAdmin ? 'text-sky-400' : 'text-emerald-400'}`}>
-                            {isAdmin ? 'أنت (الإدارة)' : msg.senderName}
-                          </span>
+                        <div className="flex items-center gap-1 mb-0.5 text-[10px] text-slate-400">
+                          <span className="font-bold">{isAdmin ? 'الإدارة' : msg.senderName}</span>
                           <span>•</span>
-                          <span className="font-mono text-[10px]">{formatTime(msg.timestamp)}</span>
+                          <span className="font-mono">{formatTime(msg.timestamp)}</span>
                         </div>
-
-                        {/* Bubble */}
-                        <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-3.5 shadow-lg ${
+                        <div className={`max-w-[85%] sm:max-w-[75%] rounded-xl p-2.5 shadow-md ${
                           isBroadcast
-                            ? 'bg-amber-500/20 text-white border-2 border-amber-500/40 rounded-tr-sm ring-1 ring-amber-500/20'
+                            ? 'bg-amber-500/20 text-white border border-amber-500/40 rounded-tr-sm'
                             : isAdmin 
-                              ? 'bg-gradient-to-r from-sky-600 to-blue-600 text-white rounded-tr-sm shadow-sky-900/20' 
-                              : 'bg-slate-800 text-slate-100 border border-slate-700 rounded-tl-sm ring-1 ring-emerald-500/30'
+                              ? 'bg-sky-600 text-white rounded-tr-sm' 
+                              : 'bg-slate-800 text-slate-100 border border-slate-700 rounded-tl-sm'
                         }`}>
-                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
-                          <div className={`flex justify-end mt-1.5 text-[10px] ${isAdmin ? 'text-sky-200' : 'text-slate-400'}`}>
-                            {isAdmin ? (
-                              <span className="font-medium">{msg.readByWindow ? '✓✓ تمت القراءة من الشباك' : '✓ تم الإرسال'}</span>
-                            ) : (
-                              <span className="font-medium">{msg.readByAdmin ? '✓✓ مقروءة' : 'رسالة واردة جديدة'}</span>
+                          <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                          <div className="flex justify-between items-center mt-1.5 pt-1 border-t border-white/10 text-[9px] text-slate-300">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyMessage(msg.id, msg.text)}
+                              className="hover:text-white cursor-pointer"
+                            >
+                              {copiedMsgId === msg.id ? 'تم النسخ ✓' : 'نسخ'}
+                            </button>
+                            {isAdmin && (
+                              <span>{msg.readByWindow ? '✓✓ مقروءة' : '✓ مرسلة'}</span>
                             )}
                           </div>
                         </div>
@@ -404,67 +471,51 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Quick Canned Messages Bar - Ultra Compact */}
-              <div className="px-3 py-1.5 bg-slate-900/90 border-t border-slate-800/80 overflow-x-auto">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap shrink-0">توجيهات سريعة:</span>
-                  <div className="flex gap-1.5">
-                    {QUICK_ADMIN_MESSAGES.map((canned, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleSendMessage(canned)}
-                        className="text-[11px] bg-slate-800 hover:bg-sky-500/20 hover:text-sky-300 text-slate-300 border border-slate-700 hover:border-sky-500/40 px-2 py-0.5 rounded-lg whitespace-nowrap transition cursor-pointer shrink-0"
-                      >
-                        {canned}
-                      </button>
-                    ))}
-                  </div>
+              {/* Quick Canned Messages Bar - Very Simple */}
+              <div className="px-2.5 py-1.5 bg-slate-900 border-t border-slate-800 overflow-x-auto">
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-[10px] text-slate-400 shrink-0 font-bold">توجيه سريع:</span>
+                  {QUICK_ADMIN_MESSAGES.map((canned, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSendMessage(canned)}
+                      className="text-[11px] bg-slate-800 hover:bg-sky-500/20 hover:text-sky-300 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-lg whitespace-nowrap transition cursor-pointer shrink-0"
+                    >
+                      {canned}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Message Input Form - Compact Sleek Design */}
+              {/* Message Input Form - Clean & Simple */}
               <form 
                 onSubmit={(e) => {
                   e.preventDefault();
                   handleSendMessage();
                 }}
-                className="p-2 sm:p-2.5 bg-slate-900/95 border-t border-slate-800 flex items-center gap-1.5 sm:gap-2"
+                className="p-2 sm:p-2.5 bg-slate-900 border-t border-slate-800 flex items-center gap-1.5 sm:gap-2"
               >
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder={`اكتب رسالة إلى ${selectedWindow.name}...`}
-                    className="w-full bg-slate-950 border border-slate-700/80 hover:border-slate-600 focus:border-sky-500 rounded-lg sm:rounded-xl px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 transition-colors pr-3 pl-8"
-                  />
-                  {inputText && (
-                    <button
-                      type="button"
-                      onClick={() => setInputText('')}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-full text-xs cursor-pointer"
-                      title="مسح النص"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder={`اكتب رسالة إلى ${selectedWindow.name}...`}
+                  className="flex-1 bg-slate-950 border border-slate-700 focus:border-sky-500 rounded-lg sm:rounded-xl px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none"
+                />
                 <button
                   type="submit"
                   disabled={!inputText.trim()}
-                  className="bg-sky-500 hover:bg-sky-600 disabled:opacity-40 disabled:hover:bg-sky-500 text-white font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition flex items-center gap-1 cursor-pointer shadow-sm text-xs sm:text-sm shrink-0 h-[34px] sm:h-[38px]"
-                  title="إرسال الرسالة"
+                  className="bg-sky-500 hover:bg-sky-600 disabled:opacity-40 text-white font-bold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition text-xs sm:text-sm shrink-0 cursor-pointer"
                 >
-                  <span>إرسال</span>
-                  <span className="text-xs">➤</span>
+                  إرسال ➤
                 </button>
               </form>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-8">
-              <span className="text-5xl mb-3">💬</span>
-              <p className="text-base font-bold text-slate-300">اختر شباكاً من القائمة الجانبية للبدء بالمحادثة</p>
-              <p className="text-xs text-slate-500 mt-1">يمكنك مراسلة كل شباك على حدة أو إرسال تعميم للجميع.</p>
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-6">
+              <span className="text-4xl mb-2">💬</span>
+              <p className="text-sm font-bold text-slate-300">اختر شباكاً للبدء بالمحادثة</p>
             </div>
           )}
         </div>
@@ -475,24 +526,22 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
       <Modal
         isOpen={isBroadcastModalOpen}
         onClose={() => setIsBroadcastModalOpen(false)}
-        title="📢 إرسال تعميم إداري لجميع الشبابيك دفعة واحدة"
+        title="📢 إرسال تعميم لجميع الشبابيك"
       >
         <div className="space-y-4">
-          <p className="text-sm text-slate-300">
-            سيتم إرسال هذا التعميم فورياً لجميع شبابيك الخدمة ({windows.length} شبابيك) في وقت واحد ويظهر بتنبيه بارز على شاشات الموظفين.
+          <p className="text-xs sm:text-sm text-slate-300">
+            سيصل هذا التعميم فورياً لجميع شبابيك الخدمة ({windows.length} شبابيك) في وقت واحد.
           </p>
 
-          <div>
-            <textarea
-              rows={4}
-              value={broadcastText}
-              onChange={(e) => setBroadcastText(e.target.value)}
-              placeholder="اكتب نص التعميم الإداري هنا (مثال: نرجو تسريع خدمة العملاء قبل موعد الصلاة / اجتماع للإدارة الساعة 2:00)..."
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
-            />
-          </div>
+          <textarea
+            rows={3}
+            value={broadcastText}
+            onChange={(e) => setBroadcastText(e.target.value)}
+            placeholder="اكتب نص التعميم هنا..."
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:border-amber-500 focus:outline-none"
+          />
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-1">
             <Button
               variant="secondary"
               onClick={() => setIsBroadcastModalOpen(false)}
@@ -502,9 +551,9 @@ export const AdminChat: React.FC<AdminChatProps> = ({ initialWindowId }) => {
             <Button
               onClick={handleSendBroadcast}
               disabled={!broadcastText.trim()}
-              className="!bg-gradient-to-r !from-amber-500 !to-orange-500 !text-slate-950 font-black hover:opacity-95"
+              className="!bg-amber-500 hover:!bg-amber-600 !text-slate-950 font-bold"
             >
-              إرسال التعميم لجميع الشبابيك الآن
+              إرسال التعميم الآن
             </Button>
           </div>
         </div>
