@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useQueueSystem } from '../context/QueueContext';
 import { Customer } from '../types';
@@ -10,8 +10,8 @@ import PrinterSettings from './PrinterSettings';
 
 const ServiceOption: React.FC<{ title: string, icon: React.ReactNode, onClick: () => void, disabled: boolean }> = ({ title, icon, onClick, disabled }) => (
     <Card 
-        className={`bg-slate-800 p-8 flex flex-col items-center justify-center border border-slate-700 hover:border-sky-500 hover:bg-slate-700 cursor-pointer transition-all active:scale-95 shadow-xl group ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
-        onClick={onClick}
+        className={`bg-slate-800 p-8 flex flex-col items-center justify-center border border-slate-700 hover:border-sky-500 hover:bg-slate-700 cursor-pointer transition-all active:scale-95 shadow-xl group select-none ${disabled ? 'opacity-50 pointer-events-none cursor-not-allowed' : ''}`}
+        onClick={disabled ? undefined : onClick}
     >
         <div className="text-sky-400 mb-4 transform group-hover:scale-110 transition-transform">{icon}</div>
         <h3 className="text-2xl font-bold text-white text-center">{title}</h3>
@@ -24,27 +24,52 @@ const KioskView: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isPrinting, setIsPrinting] = useState(false);
+    const [autoCloseCountdown, setAutoCloseCountdown] = useState<number | null>(null);
+    const isSubmittingRef = useRef(false);
 
     // معالج الطباعة والعودة للرئيسية
     const handlePrintAndReset = () => {
         setIsPrinting(true);
-        // ننتظر قليلاً لضمان رندر التذكرة في الـ Portal قبل الطباعة
         setTimeout(() => {
-            window.print();
-            // العودة للقائمة الرئيسية فوراً بعد إرسال أمر الطباعة
+            try {
+                window.print();
+            } catch (e) {
+                console.warn("Print error", e);
+            }
             setLastTicket(null);
             setIsPrinting(false);
-        }, 100);
+        }, 120);
     };
 
+    // إدارة الإغلاق التلقائي / الطباعة التلقائية
     useEffect(() => {
-        if (lastTicket && state?.printerConfig.autoPrint) {
+        if (!lastTicket) {
+            setAutoCloseCountdown(null);
+            return;
+        }
+
+        if (state?.printerConfig?.autoPrint) {
             const timer = setTimeout(() => {
                 handlePrintAndReset();
-            }, 1200); // مهلة قصيرة لرؤية الرقم ثم الطباعة والعودة تلقائياً
+            }, 1200);
             return () => clearTimeout(timer);
+        } else {
+            // مؤقت عودة تلقائي لمدة 6 ثوانٍ للزبون التالي
+            setAutoCloseCountdown(6);
+            const interval = setInterval(() => {
+                setAutoCloseCountdown(prev => {
+                    if (prev === null || prev <= 1) {
+                        clearInterval(interval);
+                        setLastTicket(null);
+                        return null;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+
+            return () => clearInterval(interval);
         }
-    }, [lastTicket, state?.printerConfig.autoPrint]);
+    }, [lastTicket, state?.printerConfig?.autoPrint]);
 
     const dynamicServices = useMemo(() => {
         if (!state) return [];
@@ -61,7 +86,11 @@ const KioskView: React.FC = () => {
     }, [state]);
 
     const handleTakeNumber = async (serviceName: string) => {
+        // حماية تكرار النقرات المتتالية ومنع تداخل الطلبات
+        if (isSubmittingRef.current || isLoading) return;
+        isSubmittingRef.current = true;
         setIsLoading(true);
+
         try {
             const newCustomer = await addCustomer(serviceName);
             if (newCustomer) {
@@ -69,9 +98,10 @@ const KioskView: React.FC = () => {
             }
         } catch (error) {
             console.error("Add Customer Error:", error);
-            alert("حدث خطأ أثناء إصدار التذكرة.");
+            alert("حدث خطأ أثناء إصدار التذكرة، يرجى المحاولة مرة أخرى.");
         } finally {
             setIsLoading(false);
+            isSubmittingRef.current = false;
         }
     };
 
@@ -178,32 +208,50 @@ const KioskView: React.FC = () => {
                     </div>
                 </>
             ) : (
-                <div className="bg-slate-800 p-12 rounded-[3.5rem] shadow-2xl border-2 border-sky-500/50 max-w-lg w-full animate-in zoom-in">
+                <div className="bg-slate-800 p-10 sm:p-12 rounded-[3.5rem] shadow-2xl border-2 border-sky-500/50 max-w-lg w-full animate-in zoom-in">
                     {isPrinting ? (
                         <div className="py-20">
                             <div className="w-16 h-16 border-4 border-sky-500/20 border-t-sky-500 rounded-full animate-spin mx-auto mb-6"></div>
-                            <p className="text-2xl font-bold text-white">جاري الطباعة والعودة...</p>
+                            <p className="text-2xl font-bold text-white">جاري الطباعة والعودة للقائمة...</p>
                         </div>
                     ) : (
                         <>
-                            <p className="text-xl text-slate-400 mb-2 font-medium">تم إصدار رقمك بنجاح</p>
-                            <h2 className="text-[10rem] font-sans font-black text-yellow-400 leading-none my-6 tracking-tighter">
+                            <div className="inline-block bg-sky-500/10 text-sky-400 px-4 py-1.5 rounded-full text-sm font-semibold mb-3 border border-sky-500/20">
+                                {lastTicket.serviceName}
+                            </div>
+                            <p className="text-xl text-slate-300 font-medium">تم إصدار رقمك بنجاح</p>
+                            <h2 className="text-[7rem] sm:text-[9rem] font-sans font-black text-yellow-400 leading-none my-6 tracking-tighter drop-shadow-md select-none">
                                 {lastTicket.ticketNumber}
                             </h2>
-                            <div className="flex flex-col gap-4 mt-8">
+
+                            {autoCloseCountdown !== null && !state?.printerConfig?.autoPrint && (
+                                <p className="text-xs text-slate-400 mb-4 flex items-center justify-center gap-1.5 font-medium">
+                                    <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+                                    العودة التلقائية للقائمة خلال {autoCloseCountdown} ثوانٍ...
+                                </p>
+                            )}
+
+                            {state?.printerConfig?.autoPrint && (
+                                <p className="text-xs text-sky-300 mb-4 flex items-center justify-center gap-1.5 font-medium animate-pulse">
+                                    <span>🖨️</span>
+                                    جاري الطباعة والعودة تلقائياً...
+                                </p>
+                            )}
+
+                            <div className="flex flex-col gap-3 mt-4">
                                 <Button 
                                     variant="primary" 
-                                    className="w-full py-5 !rounded-2xl text-2xl font-black shadow-lg shadow-sky-500/20" 
+                                    className="w-full py-4 !rounded-2xl text-xl font-black shadow-lg shadow-sky-500/20 cursor-pointer" 
                                     onClick={handlePrintAndReset}
                                 >
-                                    طـبـاعة الـتذكرة
+                                    طـبـاعة الـتذكرة 🖨️
                                 </Button>
                                 <Button 
                                     variant="secondary" 
-                                    className="w-full py-5 !rounded-2xl text-xl font-bold opacity-60" 
+                                    className="w-full py-4 !rounded-2xl text-lg font-bold bg-slate-700 hover:bg-slate-600 text-white cursor-pointer" 
                                     onClick={() => setLastTicket(null)}
                                 >
-                                    إغلاق
+                                    سحب تذكرة أخرى / العودة للقائمة ↺
                                 </Button>
                             </div>
                         </>

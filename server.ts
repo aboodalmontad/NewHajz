@@ -160,6 +160,63 @@ app.get('/api/queue/state', (req: Request, res: Response) => {
   res.json(state);
 });
 
+const getServicePrefix = (serviceName?: string): string => {
+  const name = (serviceName || '').toLowerCase();
+  if (name.includes('استقبال')) return 'A';
+  if (name.includes('حساب')) return 'B';
+  if (name.includes('عملاء')) return 'C';
+  if (name.includes('صراف') || name.includes('مالية') || name.includes('سحب')) return 'D';
+  return 'S';
+};
+
+// Atomic customer ticket issuance to prevent any duplicates or race conditions
+app.post('/api/queue/customer/add', (req: Request, res: Response) => {
+  const { syncId, serviceName } = req.body;
+  const { key, state } = getRoomState(syncId);
+
+  if (!Array.isArray(state.customers)) state.customers = [];
+  if (!Array.isArray(state.queue)) state.queue = [];
+
+  // Determine the highest existing ticket number across all historical/active customers
+  let maxExisting = 99;
+  for (const c of state.customers) {
+    if (c && c.ticketNumber) {
+      const match = String(c.ticketNumber).match(/\d+$/);
+      if (match) {
+        const num = parseInt(match[0], 10);
+        if (!isNaN(num) && num > maxExisting) {
+          maxExisting = num;
+        }
+      }
+    }
+  }
+
+  // Ensure next ticket number is strictly greater than both maxExisting and current ticketCounter
+  const currentCounter = Number(state.ticketCounter) || 100;
+  const nextTicketNumber = Math.max(currentCounter, maxExisting + 1);
+  state.ticketCounter = nextTicketNumber + 1;
+
+  const service = serviceName || 'خدمات عامة';
+  const prefix = getServicePrefix(service);
+
+  const newCustomer = {
+    id: Date.now(),
+    ticketNumber: `${prefix}-${nextTicketNumber}`,
+    requestTime: new Date().toISOString(),
+    status: 'بالانتظار',
+    serviceName: service
+  };
+
+  state.customers.push(newCustomer);
+  state.queue.push(newCustomer.id);
+
+  rooms.set(key, state);
+  persistRooms();
+  broadcastStateToRoom(key, state);
+
+  res.json({ success: true, customer: newCustomer, state });
+});
+
 app.post('/api/queue/state', (req: Request, res: Response) => {
   const syncId = (req.body.syncId || req.query.syncId) as string | undefined;
   const incomingState = req.body.state || req.body;
@@ -168,6 +225,27 @@ app.post('/api/queue/state', (req: Request, res: Response) => {
   }
 
   const { key } = getRoomState(syncId);
+
+  // Guarantee that ticketCounter cannot be regressed if customers exist
+  if (Array.isArray(incomingState.customers)) {
+    let maxExisting = 99;
+    for (const c of incomingState.customers) {
+      if (c && c.ticketNumber) {
+        const match = String(c.ticketNumber).match(/\d+$/);
+        if (match) {
+          const num = parseInt(match[0], 10);
+          if (!isNaN(num) && num > maxExisting) {
+            maxExisting = num;
+          }
+        }
+      }
+    }
+    const incomingCounter = Number(incomingState.ticketCounter) || 100;
+    if (incomingCounter <= maxExisting) {
+      incomingState.ticketCounter = maxExisting + 1;
+    }
+  }
+
   rooms.set(key, incomingState);
   persistRooms();
   broadcastStateToRoom(key, incomingState);

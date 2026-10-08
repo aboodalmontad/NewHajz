@@ -56,6 +56,25 @@ const parseDatesInState = (state: any): QueueSystemState => {
   if (!Array.isArray(state.employees)) state.employees = DEFAULT_STATE.employees;
   if (!Array.isArray(state.queue)) state.queue = [];
   if (!Array.isArray(state.customers)) state.customers = [];
+
+  // Protect ticketCounter from ever being regressed or lower than existing tickets
+  let maxExisting = 99;
+  for (const c of state.customers) {
+    if (c && c.ticketNumber) {
+      const match = String(c.ticketNumber).match(/\d+$/);
+      if (match) {
+        const num = parseInt(match[0], 10);
+        if (!isNaN(num) && num > maxExisting) {
+          maxExisting = num;
+        }
+      }
+    }
+  }
+  const counterVal = Number(state.ticketCounter) || 100;
+  if (counterVal <= maxExisting) {
+    state.ticketCounter = maxExisting + 1;
+  }
+
   return state;
 };
 
@@ -193,18 +212,68 @@ const api = {
   },
 
   addCustomer: async (serviceName?: string): Promise<Customer> => {
-    const state = await api.getState();
     const service = serviceName || 'خدمات عامة';
+    const local = loadLocalState();
+    const syncId = local.syncId;
+
+    // 1. Try atomic server endpoint first
+    try {
+      const res = await fetch('/api/queue/customer/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ syncId, serviceName: service })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.customer) {
+          const parsedCustomer: Customer = {
+            ...data.customer,
+            requestTime: new Date(data.customer.requestTime)
+          };
+          if (data.state) {
+            const parsedState = parseDatesInState(data.state);
+            saveLocalState(parsedState);
+          }
+          return parsedCustomer;
+        }
+      }
+    } catch (e) {
+      console.warn("Direct customer add API failed, using local offline fallback", e);
+    }
+
+    // 2. Safe local / offline fallback
+    const state = await api.getState();
     const prefix = getServicePrefix(service);
-    
+
+    let maxExisting = 99;
+    if (Array.isArray(state.customers)) {
+      for (const c of state.customers) {
+        if (c && c.ticketNumber) {
+          const match = String(c.ticketNumber).match(/\d+$/);
+          if (match) {
+            const num = parseInt(match[0], 10);
+            if (!isNaN(num) && num > maxExisting) {
+              maxExisting = num;
+            }
+          }
+        }
+      }
+    }
+
+    const currentCounter = Number(state.ticketCounter) || 100;
+    const nextTicketNumber = Math.max(currentCounter, maxExisting + 1);
+    state.ticketCounter = nextTicketNumber + 1;
+
     const newCustomer: Customer = {
       id: Date.now(),
-      ticketNumber: `${prefix}-${state.ticketCounter}`,
+      ticketNumber: `${prefix}-${nextTicketNumber}`,
       requestTime: new Date(),
       status: CustomerStatus.Waiting,
       serviceName: service
     };
-    state.ticketCounter++;
+
+    if (!Array.isArray(state.customers)) state.customers = [];
+    if (!Array.isArray(state.queue)) state.queue = [];
     state.customers.push(newCustomer);
     state.queue.push(newCustomer.id);
     saveLocalState(state);
