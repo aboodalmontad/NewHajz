@@ -1,0 +1,156 @@
+{
+  "default": {
+    "windows": [
+      {
+        "id": 1,
+        "name": "شباك 1",
+        "customTask": "استقبال"
+      },
+      {
+        "id": 2,
+        "name": "شباك 2",
+        "customTask": "فتح حساب جديد"
+      },
+      {
+        "id": 3,
+        "name": "شباك 3",
+        "customTask": "خدمات العملاء"
+      },
+      {
+        "id": 4,
+        "name": "شباك 4"
+      }
+    ],
+    "employees": [
+      {
+        "id": 1,
+        "name": "أحمد",
+        "username": "ahmad",
+        "password": "123",
+        "status": "متاح",
+        "customersServed": 0
+      },
+      {
+        "id": 2,
+        "name": "فاطمة",
+        "username": "fatima",
+        "password": "123",
+        "status": "متاح",
+        "customersServed": 0
+      },
+      {
+        "id": 3,
+        "name": "يوسف",
+        "username": "yousef",
+        "password": "123",
+        "status": "متاح",
+        "customersServed": 0
+      },
+      {
+        "id": 4,
+        "name": "ليلى",
+        "username": "layla",
+        "password": "123",
+        "status": "متاح",
+        "customersServed": 0
+      }
+    ],
+    "customers": [],
+    "queue": [],
+    "ticketCounter": 100,
+    "printerConfig": {
+      "paperWidth": "80mm",
+      "headerText": "نظام الطابور الذكي",
+      "headerFontSize": 20,
+      "numberFontSize": 70,
+      "detailsFontSize": 14,
+      "footerText": "شكراً لزيارتكم",
+      "showDate": true,
+      "autoPrint": true
+    },
+    "chatMessages": [
+      {
+        "id": "msg_1791482562026_m9q48",
+        "windowId": 1,
+        "senderType": "admin",
+        "senderName": "الإدارة",
+        "text": "مرحبا بكم في نظام المحادثة المباشر",
+        "timestamp": 1791482562026,
+        "readByAdmin": true,
+        "readByWindow": false
+      }
+    ]
+  },
+  "SYNC-VHBT1A": {
+    "windows": [
+      {
+        "id": 1,
+        "name": "شباك 1",
+        "customTask": "استقبال"
+      },
+      {
+        "id": 2,
+        "name": "شباك 2",
+        "customTask": "فتح حساب جديد"
+      },
+      {
+        "id": 3,
+        "name": "شباك 3",
+        "customTask": "خدمات العملاء"
+      },
+      {
+        "id": 4,
+        "name": "شباك 4"
+      }
+    ],
+    "employees": [
+      {
+        "id": 1,
+        "name": "أحمد",
+        "username": "ahmad",
+        "password": "123",
+        "status": "متاح",
+        "customersServed": 0
+      },
+      {
+        "id": 2,
+        "name": "فاطمة",
+        "username": "fatima",
+        "password": "123",
+        "status": "متاح",
+        "customersServed": 0
+      },
+      {
+        "id": 3,
+        "name": "يوسف",
+        "username": "yousef",
+        "password": "123",
+        "status": "متاح",
+        "customersServed": 0
+      },
+      {
+        "id": 4,
+        "name": "ليلى",
+        "username": "layla",
+        "password": "123",
+        "status": "متاح",
+        "customersServed": 0
+      }
+    ],
+    "customers": [],
+    "queue": [],
+    "ticketCounter": 100,
+    "printerConfig": {
+      "paperWidth": "80mm",
+      "headerText": "نظام الطابور الذكي",
+      "headerFontSize": 20,
+      "numberFontSize": 70,
+      "detailsFontSize": 14,
+      "footerText": "شكراً لزيارتكم",
+      "showDate": true,
+      "autoPrint": true
+    },
+    "chatMessages": [],
+    "syncId": "SYNC-VHBT1A"
+  }
+}

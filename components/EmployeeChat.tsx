@@ -19,47 +19,58 @@ const QUICK_EMPLOYEE_REPLIES = [
 export const EmployeeChat: React.FC<EmployeeChatProps> = ({ employee, windowData }) => {
   const { state, sendChatMessage, markChatMessagesAsRead } = useQueueSystem();
   const [inputText, setInputText] = useState('');
-  const [isOpen, setIsOpen] = useState(true);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const windowId = windowData?.id || employee.windowId;
+  // If no window is assigned yet, fallback to a virtual employee channel (e.g. window 1 or 999)
+  const windowId = windowData?.id || employee.windowId || 1;
+  const hasWindow = !!(windowData || employee.windowId);
   const allMessages = state?.chatMessages || [];
 
   // Messages for this specific window
   const windowMessages = useMemo(() => {
-    if (!windowId) return [];
     return allMessages
-      .filter(m => m.windowId === windowId)
+      .filter(m => Number(m.windowId) === Number(windowId))
       .sort((a, b) => a.timestamp - b.timestamp);
   }, [allMessages, windowId]);
 
   // Count unread messages from admin
   const unreadCount = useMemo(() => {
-    if (!windowId) return 0;
-    return allMessages.filter(m => m.windowId === windowId && m.senderType === 'admin' && !m.readByWindow).length;
+    return allMessages.filter(
+      m => Number(m.windowId) === Number(windowId) && m.senderType === 'admin' && !m.readByWindow
+    ).length;
   }, [allMessages, windowId]);
 
   // Mark messages as read by window when open
   useEffect(() => {
-    if (windowId && isOpen && unreadCount > 0) {
-      markChatMessagesAsRead(windowId, 'window');
+    if (windowId && !isMinimized && unreadCount > 0) {
+      markChatMessagesAsRead(Number(windowId), 'window');
     }
-  }, [windowId, isOpen, unreadCount]);
+  }, [windowId, isMinimized, unreadCount, markChatMessagesAsRead]);
 
   // Auto scroll to bottom
-  useEffect(() => {
-    if (isOpen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior });
     }
-  }, [windowMessages, isOpen]);
+  };
+
+  useEffect(() => {
+    if (!isMinimized) {
+      scrollToBottom('smooth');
+    }
+  }, [windowMessages, isMinimized]);
 
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
-    if (!text || !windowId) return;
+    if (!text) return;
 
-    const senderDisplayName = `${employee.name} (${windowData?.name || `شباك ${windowId}`})`;
-    await sendChatMessage(windowId, 'window', senderDisplayName, text);
+    const windowLabel = windowData?.name || (employee.windowId ? `شباك ${employee.windowId}` : 'بدون شباك');
+    const senderDisplayName = `${employee.name} (${windowLabel})`;
+    await sendChatMessage(Number(windowId), 'window', senderDisplayName, text);
     setInputText('');
+    setTimeout(() => scrollToBottom('smooth'), 100);
   };
 
   const formatTime = (ts: number) => {
@@ -67,93 +78,105 @@ export const EmployeeChat: React.FC<EmployeeChatProps> = ({ employee, windowData
     return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
   };
 
-  if (!windowId) {
-    return (
-      <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 text-center text-slate-400">
-        <span className="text-3xl mb-2 block">💬</span>
-        <h4 className="text-white font-bold mb-1">المحادثة المباشرة مع الإدارة والمدير</h4>
-        <p className="text-sm">يرجى اختيار شباك متاح للعمل عليه أولاً لتفعيل قناة المحادثة الفورية مع المدير.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl transition-all">
-      {/* Header with toggle and badge */}
+    <div className="bg-slate-850 rounded-2xl border border-slate-700/80 shadow-2xl overflow-hidden transition-all duration-300">
+      {/* Header with expand/minimize controls and unread indicator */}
       <div 
-        onClick={() => setIsOpen(!isOpen)}
-        className="p-4 bg-gradient-to-r from-slate-800 to-slate-850 hover:bg-slate-750 flex items-center justify-between cursor-pointer border-b border-slate-700/80 select-none"
+        className="p-4 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-800 border-b border-slate-700/80 flex items-center justify-between select-none"
       >
         <div className="flex items-center gap-3">
           <div className="relative">
             <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center text-xl border border-sky-500/30">
               💬
             </div>
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900 animate-pulse"></span>
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900 animate-pulse"></span>
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-extrabold text-white text-base">محادثة مباشرة مع المدير والإدارة</h3>
+              <h3 className="font-extrabold text-white text-base">المحادثة المباشرة مع المدير والإدارة</h3>
               {unreadCount > 0 && (
-                <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-bounce">
+                <span className="bg-rose-500 text-white text-xs font-black px-2 py-0.5 rounded-full animate-bounce shadow-sm">
                   {unreadCount} رسالة جديدة
                 </span>
               )}
             </div>
             <p className="text-xs text-slate-400">
-              قناة اتصال مخصصة لـ {windowData?.name || `الشباك ${windowId}`} • متصل لحظياً
+              {hasWindow 
+                ? `قناة اتصال مخصصة لـ ${windowData?.name || `الشباك ${windowId}`} • متصل لحظياً` 
+                : 'قناة الاتصال المباشر مع الإدارة • متصل لحظياً'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {!isMinimized && (
+            <button
+              type="button"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="text-slate-400 hover:text-white text-xs bg-slate-850 hover:bg-slate-700 border border-slate-750 px-2.5 py-1.5 rounded-lg transition hidden sm:inline-block cursor-pointer"
+              title={isExpanded ? 'تصغير الحجم' : 'تكبير الحجم'}
+            >
+              {isExpanded ? '⤓ قياسي' : '⤢ تكبير'}
+            </button>
+          )}
+
           <button
             type="button"
-            className="text-slate-400 hover:text-white text-sm bg-slate-700/60 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition"
+            onClick={() => setIsMinimized(!isMinimized)}
+            className="text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg transition cursor-pointer font-bold"
           >
-            {isOpen ? 'تصغير ▼' : 'فتح المحادثة ▲'}
+            {isMinimized ? 'فتح المحادثة ▲' : 'إخفاء ▼'}
           </button>
         </div>
       </div>
 
       {/* Expandable Chat Body */}
-      {isOpen && (
-        <div className="flex flex-col h-[400px]">
+      {!isMinimized && (
+        <div className={`flex flex-col transition-all duration-200 ${
+          isExpanded ? 'h-[600px]' : 'h-[420px]'
+        }`}>
           {/* Messages list */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/40">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 bg-slate-950/60">
             {windowMessages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
+              <div className="h-full min-h-[180px] flex flex-col items-center justify-center text-center p-6 text-slate-500">
                 <span className="text-4xl mb-2">🤝</span>
                 <p className="text-base font-bold text-slate-300">قناة المحادثة المباشرة مع المدير جاهزة</p>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                  يمكنك مراسلة المدير في أي وقت لطلب موافقة، استفسار، أو إبلاغ عن مشكلة أثناء خدمة العملاء.
+                <p className="text-xs text-slate-400 mt-1 max-w-sm leading-relaxed">
+                  يمكنك مراسلة المدير في أي وقت لطلب موافقة، استفسار عن معاملة، أو إبلاغ عن مشكلة أثناء خدمة العملاء.
                 </p>
               </div>
             ) : (
               windowMessages.map(msg => {
                 const isFromAdmin = msg.senderType === 'admin';
+                const isBroadcast = msg.text.startsWith('📢 [تعميم');
+
                 return (
                   <div
                     key={msg.id}
                     className={`flex flex-col ${isFromAdmin ? 'items-start' : 'items-end'}`}
                   >
+                    {/* Sender and time */}
                     <div className="flex items-center gap-1.5 mb-1 text-[11px] text-slate-400">
                       <span className={`font-bold ${isFromAdmin ? 'text-amber-400' : 'text-sky-300'}`}>
-                        {msg.senderName}
+                        {isFromAdmin ? 'المدير / الإدارة' : 'أنت'}
                       </span>
                       <span>•</span>
-                      <span>{formatTime(msg.timestamp)}</span>
+                      <span className="font-mono text-[10px]">{formatTime(msg.timestamp)}</span>
                     </div>
 
-                    <div className={`max-w-[85%] rounded-2xl p-3 shadow-md ${
-                      isFromAdmin 
-                        ? 'bg-amber-500/20 text-white border border-amber-500/30 rounded-tr-sm ring-1 ring-amber-500/20' 
-                        : 'bg-sky-600 text-white rounded-tl-sm'
+                    {/* Message Bubble */}
+                    <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-3.5 shadow-md ${
+                      isBroadcast
+                        ? 'bg-amber-500/20 text-white border-2 border-amber-500/40 rounded-tr-sm ring-1 ring-amber-500/20'
+                        : isFromAdmin 
+                          ? 'bg-slate-800 text-white border border-amber-500/30 rounded-tr-sm ring-1 ring-amber-500/20' 
+                          : 'bg-gradient-to-r from-sky-600 to-blue-600 text-white rounded-tl-sm'
                     }`}>
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-                      <div className={`flex justify-end mt-1 text-[10px] ${isFromAdmin ? 'text-amber-200' : 'text-sky-200'}`}>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                      
+                      <div className={`flex justify-end mt-1.5 text-[10px] ${isFromAdmin ? 'text-amber-300' : 'text-sky-200'}`}>
                         {isFromAdmin ? (
-                          <span>{msg.readByWindow ? '✓✓ مقروءة' : 'رسالة من الإدارة'}</span>
+                          <span>{msg.readByWindow ? '✓✓ مقروءة' : 'رسالة جديدة من المدير'}</span>
                         ) : (
                           <span>{msg.readByAdmin ? '✓✓ قرأها المدير' : '✓ تم الإرسال للمدير'}</span>
                         )}
@@ -167,40 +190,42 @@ export const EmployeeChat: React.FC<EmployeeChatProps> = ({ employee, windowData
           </div>
 
           {/* Quick reply shortcuts */}
-          <div className="px-4 py-2 bg-slate-900/60 border-t border-slate-800 overflow-x-auto">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">ردود سريعة للإدارة:</p>
-            <div className="flex gap-1.5">
-              {QUICK_EMPLOYEE_REPLIES.map((reply, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSendMessage(reply)}
-                  className="text-xs bg-slate-800 hover:bg-sky-500/20 hover:text-sky-300 text-slate-300 border border-slate-700 hover:border-sky-500/40 px-2.5 py-1 rounded-lg whitespace-nowrap transition cursor-pointer"
-                >
-                  {reply}
-                </button>
-              ))}
+          <div className="px-4 py-2 bg-slate-900 border-t border-slate-800 overflow-x-auto">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap shrink-0">ردود سريعة:</span>
+              <div className="flex gap-1.5">
+                {QUICK_EMPLOYEE_REPLIES.map((reply, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleSendMessage(reply)}
+                    className="text-xs bg-slate-800 hover:bg-sky-500/20 hover:text-sky-300 text-slate-300 border border-slate-700 hover:border-sky-500/40 px-3 py-1.5 rounded-xl whitespace-nowrap transition cursor-pointer shrink-0"
+                  >
+                    {reply}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Input field */}
+          {/* Message Input Form */}
           <form 
             onSubmit={(e) => {
               e.preventDefault();
               handleSendMessage();
             }}
-            className="p-3 bg-slate-900 border-t border-slate-700 flex items-center gap-2"
+            className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2"
           >
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder="اكتب رسالتك للمدير هنا..."
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+              className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
             />
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="bg-sky-500 hover:bg-sky-600 disabled:opacity-40 disabled:hover:bg-sky-500 text-white font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer text-sm shadow-md shadow-sky-500/20"
+              className="bg-sky-500 hover:bg-sky-600 disabled:opacity-40 disabled:hover:bg-sky-500 text-white font-bold px-5 py-3 rounded-xl transition flex items-center gap-1.5 cursor-pointer text-sm shadow-md shadow-sky-500/20 shrink-0"
             >
               <span>إرسال</span>
               <span>➤</span>

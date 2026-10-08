@@ -13,11 +13,18 @@ const AdminDashboard: React.FC = () => {
         addEmployee, updateEmployee, removeEmployee, 
         addWindow, updateWindowName, removeWindow, updateWindowTask,
         resetSystem, updateAdminPassword, rateCustomer,
-        createCustomSyncSession, enableCloudSync
+        createCustomSyncSession, enableCloudSync,
+        networkInfo, refreshNetworkInfo
     } = useQueueSystem();
     
     const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'management' | 'sync' | 'stats' | 'printer'>('overview');
     const [chatWindowId, setChatWindowId] = useState<number | null>(null);
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+    const showToast = (msg: string) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(null), 3500);
+    };
     
     // Employee Modal state
     const [isEmployeeModalOpen, setEmployeeModalOpen] = useState(false);
@@ -133,10 +140,10 @@ const AdminDashboard: React.FC = () => {
         try {
             const success = await createCustomSyncSession(codeToSet.trim());
             if (success) {
-                alert(`✅ تم تفعيل كود الربط بالشبكة المحلية بنجاح: ${codeToSet.trim()}`);
+                showToast(`✅ تم تفعيل كود الربط بالشبكة المحلية بنجاح: ${codeToSet.trim()}`);
                 setCustomCode('');
             } else {
-                alert("❌ تعذر تفعيل كود الشبكة، يرجى المحاولة مرة أخرى.");
+                showToast("❌ تعذر تفعيل كود الشبكة، يرجى المحاولة مرة أخرى.");
             }
         } finally {
             setIsConnecting(false);
@@ -182,7 +189,7 @@ const AdminDashboard: React.FC = () => {
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
-        alert("تم نسخ الكود بنجاح!");
+        showToast("تم النسخ للحافظة بنجاح! 📋");
     };
 
     if (!state) return null;
@@ -475,13 +482,48 @@ const AdminDashboard: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="border-t border-slate-700/60 pt-6">
+                        <div className="border-t border-slate-700/60 pt-6 space-y-4">
+                            <h4 className="text-white font-bold text-sm">🌐 رابط خادم الشبكة المحلية (LAN):</h4>
+                            <div className="bg-slate-900 p-4 rounded-xl border border-sky-500/30 space-y-2">
+                                <p className="text-xs text-slate-300">
+                                    افتح هذا الرابط من أي جهاز آخر (هاتف، تابلت، شاشة، كمبيوتر) متصل بنفس شبكة الواي فاي أو الراوتر:
+                                </p>
+                                <div className="flex flex-wrap gap-2 items-center pt-1">
+                                    {networkInfo?.localIps && networkInfo.localIps.length > 0 ? (
+                                        networkInfo.localIps.map(ip => {
+                                            const url = `http://${ip}:${networkInfo.port || 3000}`;
+                                            return (
+                                                <div key={ip} className="flex items-center gap-2 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 font-mono text-xs text-sky-400">
+                                                    <span>{url}</span>
+                                                    <button 
+                                                        onClick={() => copyToClipboard(url)} 
+                                                        className="text-[10px] text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded cursor-pointer transition"
+                                                    >
+                                                        نسخ الرابط
+                                                    </button>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <div className="flex items-center gap-2 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 font-mono text-xs text-sky-400">
+                                            <span>{typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}</span>
+                                            <button 
+                                                onClick={() => copyToClipboard(window.location.origin)} 
+                                                className="text-[10px] text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded cursor-pointer transition"
+                                            >
+                                                نسخ الرابط
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                             <h4 className="text-white font-bold text-sm mb-3">📋 خطوات ربط باقي الأجهزة (الكشك، شاشات العرض، الموظفين):</h4>
                             <ol className="text-slate-300 text-xs space-y-2 list-decimal list-inside leading-relaxed">
-                                <li>افتح التطبيق على الجهاز الآخر (كمبيوتر، تابلت، أو شاشة).</li>
-                                <li>من الشاشة الرئيسية اختر <strong className="text-sky-400">"الربط بالشبكة المحلية"</strong>.</li>
+                                <li>افتح الرابط الموضح أعلاه في متصفح الجهاز الآخر.</li>
+                                <li>من الشاشة الرئيسية للجهاز الآخر اضغط <strong className="text-sky-400">"الربط بالشبكة المحلية"</strong>.</li>
                                 <li>اكتب نفس الكود (<strong className="text-white">{state.syncId || 'الكود الذي حددته'}</strong>) واضغط <strong className="text-sky-400">"تأكيد الربط بالشبكة"</strong>.</li>
-                                <li>سيتم المزامنة والتحديث فورياً في الوقت الفعلي على جميع الشاشات.</li>
+                                <li>يتم التحديث والمزامنة الفورية لكافة التذاكر وشاشات الموظفين والمحادثات المباشرة لحظياً.</li>
                             </ol>
                         </div>
                     </Card>
@@ -743,6 +785,13 @@ const AdminDashboard: React.FC = () => {
                     <Button className="w-full py-4" onClick={handleSaveWindow}>حفظ</Button>
                 </div>
             </Modal>
+
+            {/* Toast Message Notification */}
+            {toastMessage && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white px-6 py-3.5 rounded-2xl border border-sky-500/50 shadow-2xl flex items-center gap-3 backdrop-blur-md animate-in slide-in-from-bottom-5">
+                    <span className="text-sm font-bold">{toastMessage}</span>
+                </div>
+            )}
         </div>
     );
 };
