@@ -6,6 +6,17 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>نظام الطابور الذكي</title>
+    <script>
+      // Suppress Vite HMR WebSocket connection errors in environments where HMR is disabled
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event && event.reason && (
+          (typeof event.reason.message === 'string' && event.reason.message.includes('WebSocket')) ||
+          (event.reason instanceof Error && event.reason.message && event.reason.message.includes('WebSocket'))
+        )) {
+          event.preventDefault();
+        }
+      });
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
   <script type="importmap">
 {
