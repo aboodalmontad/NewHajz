@@ -2,21 +2,38 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
   <head>
+    <script>
+      // Immediately suppress Vite HMR WebSocket errors in environments where HMR is disabled
+      (function() {
+        window.addEventListener('unhandledrejection', function(event) {
+          if (!event) return;
+          var reason = event.reason;
+          var msg = (reason && (reason.message || reason.stack || String(reason))) || '';
+          if (
+            msg.indexOf('WebSocket') !== -1 ||
+            msg.indexOf('vite:ws') !== -1 ||
+            msg.indexOf('closed without opened') !== -1
+          ) {
+            event.preventDefault();
+            event.stopImmediatePropagation && event.stopImmediatePropagation();
+            return false;
+          }
+        }, true);
+
+        window.addEventListener('error', function(event) {
+          var msg = (event && (event.message || '')) || '';
+          if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('closed without opened') !== -1) {
+            event.preventDefault();
+            event.stopImmediatePropagation && event.stopImmediatePropagation();
+            return false;
+          }
+        }, true);
+      })();
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>نظام الطابور الذكي</title>
-    <script>
-      // Suppress Vite HMR WebSocket connection errors in environments where HMR is disabled
-      window.addEventListener('unhandledrejection', function(event) {
-        if (event && event.reason && (
-          (typeof event.reason.message === 'string' && event.reason.message.includes('WebSocket')) ||
-          (event.reason instanceof Error && event.reason.message && event.reason.message.includes('WebSocket'))
-        )) {
-          event.preventDefault();
-        }
-      });
-    </script>
     <script src="https://cdn.tailwindcss.com"></script>
   <script type="importmap">
 {
