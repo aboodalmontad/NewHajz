@@ -1,3 +1,4 @@
+
 export enum EmployeeStatus {
   Available = 'متاح',
   Busy = 'مشغول',
@@ -9,42 +10,6 @@ export enum CustomerStatus {
   Served = 'تمت خدمته',
 }
 
-export type DeviceRole = 'kiosk' | 'display' | 'employee' | 'admin' | 'observer';
-export type DevicePlatform = 'desktop' | 'mobile' | 'tablet';
-
-export interface ConnectedDevice {
-  id: string;
-  name: string;
-  role: DeviceRole;
-  platform: DevicePlatform;
-  ip?: string;
-  status: 'online' | 'degraded' | 'offline';
-  lastSeen: number;
-  latencyMs?: number;
-  windowId?: number;
-  employeeName?: string;
-  isHost?: boolean;
-}
-
-export interface LanNetworkInfo {
-  localIps: string[];
-  port: number;
-  serverTime: number;
-  primaryLanUrl: string;
-}
-
-export interface ConnectionTestLog {
-  id: string;
-  fromId: string;
-  fromName: string;
-  toId: string;
-  toName: string;
-  latencyMs: number;
-  status: 'success' | 'timeout';
-  timestamp: number;
-  message?: string;
-}
-
 export interface PrinterConfig {
   paperWidth: '58mm' | '80mm' | 'A4';
   headerText: string;
@@ -54,6 +19,17 @@ export interface PrinterConfig {
   footerText: string;
   showDate: boolean;
   autoPrint: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  windowId: number;
+  senderType: 'admin' | 'window';
+  senderName: string;
+  text: string;
+  timestamp: number;
+  readByAdmin: boolean;
+  readByWindow: boolean;
 }
 
 export interface Customer {
@@ -89,34 +65,19 @@ export interface Window {
 }
 
 export interface QueueSystemState {
-  windows: Window[];
-  employees: Employee[];
   customers: Customer[];
   queue: number[];
+  employees: Employee[];
+  windows: Window[];
   ticketCounter: number;
   syncId?: string;
-  roomPin?: string;
   printerConfig: PrinterConfig;
-  lastUpdated?: number;
+  chatMessages?: ChatMessage[];
 }
 
-export type LanMessage =
-  | { type: 'REGISTER_DEVICE'; device: ConnectedDevice }
-  | { type: 'DEVICE_LIST'; devices: ConnectedDevice[] }
-  | { type: 'DEVICE_JOINED'; device: ConnectedDevice }
-  | { type: 'DEVICE_LEFT'; deviceId: string }
-  | { type: 'PING'; pingId: string; fromId: string; toId?: string; timestamp: number }
-  | { type: 'PONG'; pingId: string; fromId: string; toId: string; originalTimestamp: number; serverTimestamp: number }
-  | { type: 'CONFIRM_REQUEST'; requestId: string; fromDevice: ConnectedDevice; toDeviceId?: string; note?: string; timestamp: number }
-  | { type: 'CONFIRM_RESPONSE'; requestId: string; fromDevice: ConnectedDevice; toDeviceId: string; roundtripMs: number; timestamp: number }
-  | { type: 'STATE_UPDATE'; state: QueueSystemState; sourceDeviceId?: string }
-  | { type: 'CALL_NOTIFICATION'; ticketNumber: string; windowName: string; windowId: number }
-  | { type: 'BROADCAST_CHAT'; fromName: string; message: string; timestamp: number };
-
-export type MeshMessage =
-  | { type: 'STATE_UPDATE'; state: QueueSystemState }
-  | { type: 'ACTION_ADD_CUSTOMER'; serviceName?: string }
-  | { type: 'ACTION_CALL_NEXT'; employeeId: number }
-  | { type: 'ACTION_FINISH'; employeeId: number }
-  | { type: 'LAN_PING'; id: string; time: number }
-  | { type: 'LAN_PONG'; id: string; time: number };
+export type MeshMessage = 
+  | { type: 'STATE_UPDATE', state: QueueSystemState }
+  | { type: 'ACTION_ADD_CUSTOMER', serviceName?: string }
+  | { type: 'ACTION_CALL_NEXT', employeeId: number }
+  | { type: 'ACTION_FINISH', employeeId: number }
+  | { type: 'CHAT_MESSAGE', message: ChatMessage };

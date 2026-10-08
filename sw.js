@@ -1,8 +1,8 @@
-const CACHE_NAME = 'smart-queue-offline-v4';
+
+const CACHE_NAME = 'smart-queue-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './manifest.json',
   'https://cdn.tailwindcss.com'
 ];
 
@@ -33,12 +33,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Never cache API requests or WebSocket upgrades
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws')) {
-    return;
-  }
+  if (!event.request.url.startsWith('http')) return;
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
@@ -47,7 +42,8 @@ self.addEventListener('fetch', (event) => {
       }
 
       return fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
+        // نقوم بتخزين المكتبات الخارجية فقط لضمان عمل الواجهة
+        if (networkResponse && networkResponse.status === 200 && (event.request.url.includes('aistudiocdn.com') || event.request.url.includes('tailwindcss.com'))) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
