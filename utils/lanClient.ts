@@ -223,6 +223,14 @@ class LanClientManager {
           }
         }
 
+        // Also sync state if provided
+        if (data.state) {
+          this.handleIncomingMessage({
+            type: 'STATE_UPDATE',
+            state: data.state
+          });
+        }
+
         // Update connected devices list
         if (Array.isArray(data.devices)) {
           this.updateDeviceList(data.devices);
