@@ -21,6 +21,17 @@ export interface PrinterConfig {
   autoPrint: boolean;
 }
 
+export interface ChatMessage {
+  id: string;
+  windowId: number;
+  senderType: 'admin' | 'window';
+  senderName: string;
+  text: string;
+  timestamp: number;
+  readByAdmin: boolean;
+  readByWindow: boolean;
+}
+
 export interface Customer {
   id: number;
   ticketNumber: string;
@@ -61,10 +72,12 @@ export interface QueueSystemState {
   ticketCounter: number;
   syncId?: string;
   printerConfig: PrinterConfig;
+  chatMessages?: ChatMessage[];
 }
 
 export type MeshMessage = 
   | { type: 'STATE_UPDATE', state: QueueSystemState }
   | { type: 'ACTION_ADD_CUSTOMER', serviceName?: string }
   | { type: 'ACTION_CALL_NEXT', employeeId: number }
-  | { type: 'ACTION_FINISH', employeeId: number };
+  | { type: 'ACTION_FINISH', employeeId: number }
+  | { type: 'CHAT_MESSAGE', message: ChatMessage };

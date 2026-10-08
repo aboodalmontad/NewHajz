@@ -1,8 +1,9 @@
 
 import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback, useRef } from 'react';
 import api from '../server/api';
-import { Customer, Employee, Window, QueueSystemState, MeshMessage, PrinterConfig } from '../types';
+import { Customer, Employee, Window, QueueSystemState, MeshMessage, PrinterConfig, ChatMessage } from '../types';
 import { PeerManager, PeerStatus } from '../server/peerManager';
+import { playMessageNotificationSound } from '../utils/sound';
 
 interface QueueContextType {
   state: QueueSystemState | null;
@@ -27,6 +28,12 @@ interface QueueContextType {
   authenticateAdmin: (password: string) => Promise<boolean>;
   updateAdminPassword: (newPassword: string) => Promise<void>;
   updatePrinterConfig: (config: PrinterConfig) => Promise<void>;
+
+  // Chat between Admin and Windows
+  sendChatMessage: (windowId: number, senderType: 'admin' | 'window', senderName: string, text: string) => Promise<ChatMessage | undefined>;
+  broadcastChatMessage: (senderName: string, text: string) => Promise<void>;
+  markChatMessagesAsRead: (windowId: number, readerType: 'admin' | 'window') => Promise<void>;
+  clearChatHistory: (windowId?: number) => Promise<void>;
   
   // Cloud Sync Methods
   enableCloudSync: () => Promise<string>;
@@ -52,6 +59,7 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [isLoading, setIsLoading] = useState(true);
   const [meshStatus, setMeshStatus] = useState<PeerStatus>('idle');
   const peerRef = useRef<PeerManager | null>(null);
+  const prevChatCountRef = useRef<number>(0);
 
   const fetchState = useCallback(async () => {
     try {
@@ -69,6 +77,17 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       peerRef.current.send({ type: 'STATE_UPDATE', state });
     }
   }, [state, meshStatus]);
+
+  // Track new chat messages and play chime sound
+  useEffect(() => {
+    if (state && Array.isArray(state.chatMessages)) {
+      const currentCount = state.chatMessages.length;
+      if (prevChatCountRef.current > 0 && currentCount > prevChatCountRef.current) {
+        playMessageNotificationSound();
+      }
+      prevChatCountRef.current = currentCount;
+    }
+  }, [state?.chatMessages]);
 
   // BroadcastChannel for instant automatic local multi-window / multi-screen sync
   useEffect(() => {
@@ -149,6 +168,43 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const sendChatMessage = async (windowId: number, senderType: 'admin' | 'window', senderName: string, text: string) => {
+    try {
+      const msg = await api.sendChatMessage(windowId, senderType, senderName, text);
+      await fetchState();
+      return msg;
+    } catch (e) {
+      console.error("Send chat error", e);
+    }
+  };
+
+  const broadcastChatMessage = async (senderName: string, text: string) => {
+    try {
+      await api.broadcastChatMessage(senderName, text);
+      await fetchState();
+    } catch (e) {
+      console.error("Broadcast chat error", e);
+    }
+  };
+
+  const markChatMessagesAsRead = async (windowId: number, readerType: 'admin' | 'window') => {
+    try {
+      await api.markChatMessagesAsRead(windowId, readerType);
+      await fetchState();
+    } catch (e) {
+      console.error("Mark chat read error", e);
+    }
+  };
+
+  const clearChatHistory = async (windowId?: number) => {
+    try {
+      await api.clearChatHistory(windowId);
+      await fetchState();
+    } catch (e) {
+      console.error("Clear chat error", e);
+    }
+  };
+
   const value = {
     state, isLoading, meshStatus, fetchState,
     addCustomer: async (s?: string) => {
@@ -173,6 +229,10 @@ export const QueueProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     authenticateAdmin: api.authenticateAdmin,
     updateAdminPassword: api.updateAdminPassword,
     updatePrinterConfig: (c: PrinterConfig) => performApiCall(() => api.updatePrinterConfig(c)),
+    sendChatMessage,
+    broadcastChatMessage,
+    markChatMessagesAsRead,
+    clearChatHistory,
     enableCloudSync, joinCloudSync,
     createCustomSyncSession: async (customId: string) => {
         const success = await api.createCustomSyncSession(customId);

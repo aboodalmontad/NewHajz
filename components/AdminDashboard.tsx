@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useQueueSystem } from '../context/QueueContext';
-import { Employee, CustomerStatus } from '../types';
+import { Employee, CustomerStatus, Customer } from '../types';
 import { Button } from './shared/Button';
 import { Card } from './shared/Card';
 import { Modal } from './shared/Modal';
 import PrinterSettings from './PrinterSettings';
+import { AdminChat } from './AdminChat';
 
 const AdminDashboard: React.FC = () => {
     const { 
@@ -15,7 +16,8 @@ const AdminDashboard: React.FC = () => {
         createCustomSyncSession, enableCloudSync
     } = useQueueSystem();
     
-    const [activeTab, setActiveTab] = useState<'overview' | 'management' | 'stats' | 'printer' | 'sync'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'chat' | 'management' | 'sync' | 'stats' | 'printer'>('overview');
+    const [chatWindowId, setChatWindowId] = useState<number | null>(null);
     
     // Employee Modal state
     const [isEmployeeModalOpen, setEmployeeModalOpen] = useState(false);
@@ -141,16 +143,6 @@ const AdminDashboard: React.FC = () => {
         }
     };
 
-    const handleGenerateAutoCode = async () => {
-        setIsConnecting(true);
-        try {
-            const id = await enableCloudSync();
-            alert(`✅ تم توليد وتفعيل كود الشبكة بنجاح: ${id}`);
-        } finally {
-            setIsConnecting(false);
-        }
-    };
-
     const handleClearCache = async () => {
         if (window.confirm("هل أنت متأكد من مسح الكاش والذاكرة المؤقتة بالكامل؟ سيتم مسح كافة البيانات وإعادة تحميل التطبيق نظيفاً.")) {
             try {
@@ -202,18 +194,31 @@ const AdminDashboard: React.FC = () => {
         ? (ratedCustomers.reduce((acc, c) => acc + (c.rating || 0), 0) / ratedCustomers.length).toFixed(1) 
         : '0.0';
 
+    // Chat unread count for admin
+    const chatMessages = state.chatMessages || [];
+    const totalUnreadChat = chatMessages.filter(m => m.senderType === 'window' && !m.readByAdmin).length;
+
     return (
         <div className="space-y-10 max-w-7xl mx-auto pb-20 animate-in fade-in duration-500">
+            {/* Header section */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                 <div>
-                    <h2 className="text-4xl font-extrabold text-white tracking-tight">لوحة الإدارة الشاملة</h2>
+                    <h2 className="text-4xl font-extrabold text-white tracking-tight">لوحة الإدارة والتحكم</h2>
                     <p className="text-slate-400 mt-2 flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${state.syncId ? 'bg-green-500 animate-pulse' : 'bg-slate-500'}`}></span>
                         {state.syncId ? `متصل بالشبكة المحلية (كود الربط: ${state.syncId})` : 'وضع العمل المحلي المستقل'}
                     </p>
                 </div>
                 <div className="flex bg-slate-800 p-1.5 rounded-2xl border border-slate-700 shadow-inner overflow-x-auto max-w-full">
-                    <button onClick={() => setActiveTab('overview')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'overview' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>نظرة عامة والنظام</button>
+                    <button onClick={() => setActiveTab('overview')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'overview' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>نظرة عامة والشبابيك</button>
+                    <button onClick={() => setActiveTab('chat')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'chat' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                        <span>محادثة الشبابيك</span>
+                        {totalUnreadChat > 0 && (
+                            <span className="bg-rose-500 text-white text-xs px-2 py-0.5 rounded-full font-bold animate-pulse">
+                                {totalUnreadChat}
+                            </span>
+                        )}
+                    </button>
                     <button onClick={() => setActiveTab('management')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'management' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>إدارة الموظفين والشبابيك</button>
                     <button onClick={() => setActiveTab('sync')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'sync' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>الربط بالشبكة المحلية</button>
                     <button onClick={() => setActiveTab('stats')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'stats' ? 'bg-sky-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>الإحصائيات والتقييمات</button>
@@ -221,11 +226,13 @@ const AdminDashboard: React.FC = () => {
                 </div>
             </div>
 
+            {/* Overview Tab */}
             {activeTab === 'overview' && (
                 <div className="space-y-8">
+                    {/* Top KPI Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         <Card className="bg-slate-800 p-8 border border-slate-700">
-                            <p className="text-slate-400 font-bold mb-2 text-xs uppercase tracking-widest">العملاء بالانتظار</p>
+                            <p className="text-slate-400 font-bold mb-2 text-xs uppercase tracking-widest">العملاء في قائمة الانتظار</p>
                             <p className="text-5xl font-black text-white">{state.queue.length}</p>
                         </Card>
                         <Card className="bg-slate-800 p-8 border border-slate-700">
@@ -240,6 +247,107 @@ const AdminDashboard: React.FC = () => {
                         </Card>
                     </div>
 
+                    {/* LIVE WINDOW STATUS & CURRENT SERVING NUMBER MONITOR */}
+                    <Card className="bg-slate-800 p-8 border border-slate-700 space-y-6 shadow-2xl">
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b border-slate-700/70 pb-4">
+                            <div>
+                                <h3 className="text-2xl font-extrabold text-white flex items-center gap-3">
+                                    <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    حالة الشبابيك المباشرة والأرقام قيد الخدمة
+                                </h3>
+                                <p className="text-slate-400 text-sm mt-1">عرض فوري لكل شباك: حالته الحالية، الرقم الذي يخدمه الآن، والموظف المسؤول</p>
+                            </div>
+                            <span className="text-xs bg-slate-900 text-sky-400 px-3.5 py-1.5 rounded-xl border border-slate-700 font-bold self-start sm:self-auto flex items-center gap-1.5">
+                                <span>⚡</span> تحديث لحظي
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {state.windows.map(win => {
+                                const currentCustomer = state.customers.find(c => c.id === win.currentCustomerId);
+                                const employee = state.employees.find(e => e.windowId === win.id || e.id === win.employeeId);
+                                const isServing = !!currentCustomer;
+                                const isAvailable = employee && !currentCustomer;
+
+                                return (
+                                    <div 
+                                        key={win.id} 
+                                        className={`p-5 rounded-2xl border transition-all flex flex-col justify-between ${
+                                            isServing 
+                                                ? 'bg-slate-900/90 border-sky-500 shadow-lg shadow-sky-500/10 ring-1 ring-sky-500/30' 
+                                                : isAvailable 
+                                                    ? 'bg-slate-900/60 border-emerald-500/40' 
+                                                    : 'bg-slate-900/30 border-slate-800 opacity-75'
+                                        }`}
+                                    >
+                                        <div>
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <h4 className="text-lg font-black text-white">{win.name}</h4>
+                                                    <p className="text-xs text-slate-400">{win.customTask || 'خدمات عامة'}</p>
+                                                </div>
+                                                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                                                    isServing 
+                                                        ? 'bg-sky-500/20 text-sky-400 border-sky-500/40 animate-pulse' 
+                                                        : isAvailable 
+                                                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
+                                                            : 'bg-slate-800 text-slate-500 border-slate-700'
+                                                }`}>
+                                                    {isServing ? 'قيد الخدمة' : isAvailable ? 'متاح بانتظار عميل' : 'مغلق'}
+                                                </span>
+                                            </div>
+
+                                            <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 text-center my-3">
+                                                <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1">الرقم قيد الخدمة حالياً</p>
+                                                {isServing && currentCustomer ? (
+                                                    <div>
+                                                        <p className="text-4xl font-mono font-black text-amber-400 tracking-wider">
+                                                            {currentCustomer.ticketNumber}
+                                                        </p>
+                                                        <p className="text-[11px] text-sky-400 mt-1 truncate">
+                                                            {currentCustomer.serviceName || win.customTask || 'عامة'}
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-base font-bold text-slate-500 py-1">
+                                                        {isAvailable ? 'لا يوجد عميل حالياً' : 'الشباك غير مفعّل'}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-xs text-slate-400 pt-3 border-t border-slate-800/80">
+                                            <span>الموظف المناوب:</span>
+                                            <span className={`font-bold ${employee ? 'text-white' : 'text-slate-500'}`}>
+                                                {employee ? `👤 ${employee.name}` : '❌ لا يوجد موظف'}
+                                            </span>
+                                        </div>
+
+                                        {/* Direct Chat with this Window */}
+                                        <button
+                                            onClick={() => {
+                                                setChatWindowId(win.id);
+                                                setActiveTab('chat');
+                                            }}
+                                            className="mt-3 w-full bg-slate-800/90 hover:bg-sky-600/30 text-sky-400 hover:text-sky-300 border border-slate-700 hover:border-sky-500/50 rounded-xl py-2 px-3 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            <span>💬 محادثة هذا الشباك</span>
+                                            {(() => {
+                                                const winUnread = chatMessages.filter(m => m.windowId === win.id && m.senderType === 'window' && !m.readByAdmin).length;
+                                                return winUnread > 0 ? (
+                                                    <span className="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
+                                                        {winUnread} جديدة
+                                                    </span>
+                                                ) : null;
+                                            })()}
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </Card>
+
+                    {/* Admin Settings and Maintenance */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {/* Admin Password Change Card */}
                         <Card className="bg-slate-800 p-8 border border-slate-700 space-y-4">
@@ -250,7 +358,7 @@ const AdminDashboard: React.FC = () => {
                                 value={newAdminPass}
                                 onChange={e => setNewAdminPass(e.target.value)}
                                 placeholder="كلمة المرور الجديدة"
-                                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-sky-500"
+                                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-sky-500 text-right"
                             />
                             <Button onClick={handleUpdateAdminPass} disabled={!newAdminPass}>تحديث كلمة المرور</Button>
                             {adminPassMsg && <p className="text-green-400 text-sm mt-2">{adminPassMsg}</p>}
@@ -281,6 +389,24 @@ const AdminDashboard: React.FC = () => {
                             </div>
                         </Card>
                     </div>
+                </div>
+            )}
+
+            {/* Window Chat Tab */}
+            {activeTab === 'chat' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                        <div>
+                            <h3 className="text-2xl font-black text-white flex items-center gap-2">
+                                <span>💬</span>
+                                <span>المحادثة المباشرة مع شبابيك الخدمة</span>
+                            </h3>
+                            <p className="text-slate-400 text-sm mt-1">
+                                تواصل فوري مع موظف كل شباك على حدة، إرسال توجيهات سريعة، أو تعميم للجميع.
+                            </p>
+                        </div>
+                    </div>
+                    <AdminChat initialWindowId={chatWindowId} />
                 </div>
             )}
 
@@ -324,7 +450,7 @@ const AdminDashboard: React.FC = () => {
                                     value={customCode} 
                                     onChange={e => setCustomCode(e.target.value)} 
                                     placeholder="اكتب كود الشبكة (مثال: 1234)..."
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-5 py-4 text-white text-lg font-mono tracking-wider outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-5 py-4 text-white text-lg font-mono tracking-wider outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-right"
                                 />
                                 <Button 
                                     onClick={() => handleSetNetworkCode(customCode)} 
@@ -478,6 +604,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* Management Tab */}
             {activeTab === 'management' && (
                 <div className="space-y-12 animate-in slide-in-from-bottom-4">
                     {/* Employees Section */}
@@ -510,37 +637,74 @@ const AdminDashboard: React.FC = () => {
                     {/* Windows Section */}
                     <section>
                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-2xl font-bold text-white">إدارة الشبابيك والخدمات (إضافة، تعديل، حذف)</h3>
+                            <h3 className="text-2xl font-bold text-white">إدارة الشبابيك وحالتها المباشرة</h3>
                             <Button onClick={handleOpenAddWindow}>إضافة شباك جديد</Button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {state.windows.map(win => (
-                                <Card key={win.id} className="bg-slate-800 p-6 border border-slate-700 transition-all hover:border-slate-500 space-y-4">
-                                    <div className="flex justify-between items-start">
+                            {state.windows.map(win => {
+                                const currentCustomer = state.customers.find(c => c.id === win.currentCustomerId);
+                                const employee = state.employees.find(e => e.windowId === win.id || e.id === win.employeeId);
+                                const isServing = !!currentCustomer;
+
+                                return (
+                                    <Card key={win.id} className="bg-slate-800 p-6 border border-slate-700 transition-all hover:border-slate-500 space-y-4">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-white font-bold text-xl">{win.name}</p>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                                        isServing 
+                                                            ? 'bg-sky-500/20 text-sky-400 border-sky-500/40 animate-pulse' 
+                                                            : employee 
+                                                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
+                                                                : 'bg-slate-900 text-slate-500 border-slate-700'
+                                                    }`}>
+                                                        {isServing ? 'يخدم الآن' : employee ? 'متاح' : 'مغلق'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-slate-400 mt-1">الخدمة: <span className="text-sky-400">{win.customTask || 'خدمات عامة'}</span></p>
+                                            </div>
+                                            <div className="flex items-center space-x-1 space-x-reverse">
+                                                <button onClick={() => handleOpenEditWindow(win)} className="text-slate-400 hover:text-sky-400 p-1.5" title="تعديل الشباك">
+                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                </button>
+                                                <button onClick={() => removeWindow(win.id)} className="text-slate-600 hover:text-red-500 p-1.5" title="حذف الشباك">
+                                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Status and current ticket indicator */}
+                                        <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-700/60 flex justify-between items-center text-xs">
+                                            <span className="text-slate-400">الرقم قيد الخدمة:</span>
+                                            {isServing && currentCustomer ? (
+                                                <span className="font-mono font-black text-amber-400 text-lg bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/30">
+                                                    {currentCustomer.ticketNumber}
+                                                </span>
+                                            ) : (
+                                                <span className="text-slate-500 font-bold">لا يوجد</span>
+                                            )}
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-xs text-slate-400">
+                                            <span>الموظف المناوب:</span>
+                                            <span className={`font-bold ${employee ? 'text-white' : 'text-slate-500'}`}>
+                                                {employee ? `👤 ${employee.name}` : 'غير متصل'}
+                                            </span>
+                                        </div>
+
                                         <div>
-                                            <p className="text-white font-bold text-xl">{win.name}</p>
-                                            <p className="text-xs text-slate-400 mt-1">الخدمة المرتبطة: <span className="text-sky-400">{win.customTask || 'خدمات عامة'}</span></p>
+                                            <label className="text-[11px] text-slate-400 block mb-1">تعديل سريع لنوع الخدمة:</label>
+                                            <input 
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sky-400 text-sm focus:ring-1 focus:ring-sky-500 outline-none text-right"
+                                                defaultValue={win.customTask || ''}
+                                                onBlur={(e) => updateWindowTask(win.id, e.target.value)}
+                                                placeholder="أدخل نوع الخدمة (مثال: فتح حساب)..."
+                                            />
                                         </div>
-                                        <div className="flex items-center space-x-1 space-x-reverse">
-                                            <button onClick={() => handleOpenEditWindow(win)} className="text-slate-400 hover:text-sky-400 p-1.5" title="تعديل الشباك">
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                            </button>
-                                            <button onClick={() => removeWindow(win.id)} className="text-slate-600 hover:text-red-500 p-1.5" title="حذف الشباك">
-                                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-[11px] text-slate-400 block mb-1">تعديل سريع لنوع الخدمة:</label>
-                                        <input 
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sky-400 text-sm focus:ring-1 focus:ring-sky-500 outline-none"
-                                            defaultValue={win.customTask || ''}
-                                            onBlur={(e) => updateWindowTask(win.id, e.target.value)}
-                                            placeholder="أدخل نوع الخدمة (مثال: فتح حساب)..."
-                                        />
-                                    </div>
-                                </Card>
-                            ))}
+                                    </Card>
+                                );
+                            })}
                         </div>
                     </section>
                 </div>
@@ -548,18 +712,18 @@ const AdminDashboard: React.FC = () => {
 
             {/* Employee Add/Edit Modal */}
             <Modal isOpen={isEmployeeModalOpen} onClose={() => setEmployeeModalOpen(false)} title={editingEmployee ? "تعديل بيانات الموظف" : "إضافة موظف جديد"}>
-                <div className="space-y-4 pt-4">
+                <div className="space-y-4 pt-4 text-right">
                     <div>
                         <label className="text-slate-400 text-xs block mb-1">اسم الموظف:</label>
-                        <input value={empName} onChange={e => setEmpName(e.target.value)} placeholder="مثال: أحمد محمد" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500"/>
+                        <input value={empName} onChange={e => setEmpName(e.target.value)} placeholder="مثال: أحمد محمد" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 text-right"/>
                     </div>
                     <div>
                         <label className="text-slate-400 text-xs block mb-1">اسم المستخدم:</label>
-                        <input value={empUser} onChange={e => setEmpUser(e.target.value)} placeholder="مثال: ahmad" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500"/>
+                        <input value={empUser} onChange={e => setEmpUser(e.target.value)} placeholder="مثال: ahmad" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 text-right"/>
                     </div>
                     <div>
                         <label className="text-slate-400 text-xs block mb-1">كلمة المرور {editingEmployee ? "(اتركها فارغة إن لم ترغب بتغييرها)" : ":"}</label>
-                        <input type="password" value={empPass} onChange={e => setEmpPass(e.target.value)} placeholder="كلمة المرور" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500"/>
+                        <input type="password" value={empPass} onChange={e => setEmpPass(e.target.value)} placeholder="كلمة المرور" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 text-right"/>
                     </div>
                     <Button className="w-full py-4" onClick={handleSaveEmployee}>حفظ التعديلات</Button>
                 </div>
@@ -567,14 +731,14 @@ const AdminDashboard: React.FC = () => {
 
             {/* Window Add/Edit Modal */}
             <Modal isOpen={isWindowModalOpen} onClose={() => setWindowModalOpen(false)} title={editingWindowId !== null ? "تعديل الشباك والخدمة" : "إضافة شباك جديد"}>
-                <div className="space-y-4 pt-4">
+                <div className="space-y-4 pt-4 text-right">
                     <div>
                         <label className="text-slate-400 text-xs block mb-1">رقم/اسم الشباك:</label>
-                        <input value={winName} onChange={e => setWinName(e.target.value)} placeholder="مثال: شباك 1" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500"/>
+                        <input value={winName} onChange={e => setWinName(e.target.value)} placeholder="مثال: شباك 1" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 text-right"/>
                     </div>
                     <div>
                         <label className="text-slate-400 text-xs block mb-1">نوع الخدمة المرتبطة بالشباك (اختياري):</label>
-                        <input value={winTask} onChange={e => setWinTask(e.target.value)} placeholder="مثال: فتح حساب جديد (أو اتركها فارغة لخدمات عامة)" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500"/>
+                        <input value={winTask} onChange={e => setWinTask(e.target.value)} placeholder="مثال: فتح حساب جديد (أو اتركها فارغة لخدمات عامة)" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-sky-500 text-right"/>
                     </div>
                     <Button className="w-full py-4" onClick={handleSaveWindow}>حفظ</Button>
                 </div>

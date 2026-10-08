@@ -1,5 +1,5 @@
 
-import { QueueSystemState, Employee, Window, Customer, EmployeeStatus, CustomerStatus, PrinterConfig } from '../types';
+import { QueueSystemState, Employee, Window, Customer, EmployeeStatus, CustomerStatus, PrinterConfig, ChatMessage } from '../types';
 
 const STORAGE_KEY = 'smart_queue_system_state_v1';
 const ADMIN_PASSWORD_KEY = 'admin_password_config';
@@ -32,7 +32,8 @@ const DEFAULT_STATE: QueueSystemState = {
   customers: [],
   queue: [],
   ticketCounter: 100,
-  printerConfig: DEFAULT_PRINTER_CONFIG
+  printerConfig: DEFAULT_PRINTER_CONFIG,
+  chatMessages: []
 };
 
 const getServicePrefix = (serviceName: string): string => {
@@ -56,6 +57,7 @@ const loadLocalState = (): QueueSystemState => {
       });
       if (!parsed.printerConfig) parsed.printerConfig = DEFAULT_PRINTER_CONFIG;
       else if (!parsed.printerConfig.headerText) parsed.printerConfig.headerText = DEFAULT_PRINTER_CONFIG.headerText;
+      if (!Array.isArray(parsed.chatMessages)) parsed.chatMessages = [];
       return parsed;
     }
   } catch (e) {
@@ -99,6 +101,7 @@ const api = {
             if (c.finishTime) c.finishTime = new Date(c.finishTime);
           });
           if (!remote.printerConfig) remote.printerConfig = DEFAULT_PRINTER_CONFIG;
+          if (!Array.isArray(remote.chatMessages)) remote.chatMessages = [];
           saveLocalState(remote);
           return remote;
         }
@@ -333,6 +336,88 @@ const api = {
     state.ticketCounter = 100;
     state.windows = state.windows.map(w => ({ ...w, currentCustomerId: undefined, employeeId: undefined }));
     state.employees = state.employees.map(e => ({ ...e, windowId: undefined, status: EmployeeStatus.Available, customersServed: 0 }));
+    state.chatMessages = [];
+    saveLocalState(state);
+    pushToCloud(state);
+  },
+
+  sendChatMessage: async (windowId: number, senderType: 'admin' | 'window', senderName: string, text: string): Promise<ChatMessage> => {
+    const state = await api.getState();
+    if (!Array.isArray(state.chatMessages)) state.chatMessages = [];
+    const newMessage: ChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      windowId,
+      senderType,
+      senderName,
+      text: text.trim(),
+      timestamp: Date.now(),
+      readByAdmin: senderType === 'admin',
+      readByWindow: senderType === 'window'
+    };
+    state.chatMessages.push(newMessage);
+    if (state.chatMessages.length > 500) {
+      state.chatMessages = state.chatMessages.slice(-500);
+    }
+    saveLocalState(state);
+    pushToCloud(state);
+    return newMessage;
+  },
+
+  broadcastChatMessage: async (senderName: string, text: string): Promise<void> => {
+    const state = await api.getState();
+    if (!Array.isArray(state.chatMessages)) state.chatMessages = [];
+    const trimmed = text.trim();
+    if (!trimmed || state.windows.length === 0) return;
+
+    state.windows.forEach(win => {
+      state.chatMessages?.push({
+        id: `msg_bcast_${Date.now()}_${win.id}_${Math.random().toString(36).substring(2, 5)}`,
+        windowId: win.id,
+        senderType: 'admin',
+        senderName: senderName || 'الإدارة (تعميم)',
+        text: `📢 [تعميم لكافة الشبابيك]: ${trimmed}`,
+        timestamp: Date.now(),
+        readByAdmin: true,
+        readByWindow: false
+      });
+    });
+
+    if (state.chatMessages.length > 500) {
+      state.chatMessages = state.chatMessages.slice(-500);
+    }
+    saveLocalState(state);
+    pushToCloud(state);
+  },
+
+  markChatMessagesAsRead: async (windowId: number, readerType: 'admin' | 'window'): Promise<void> => {
+    const state = await api.getState();
+    if (!Array.isArray(state.chatMessages) || state.chatMessages.length === 0) return;
+    let changed = false;
+    state.chatMessages.forEach(msg => {
+      if (msg.windowId === windowId) {
+        if (readerType === 'admin' && !msg.readByAdmin) {
+          msg.readByAdmin = true;
+          changed = true;
+        } else if (readerType === 'window' && !msg.readByWindow) {
+          msg.readByWindow = true;
+          changed = true;
+        }
+      }
+    });
+    if (changed) {
+      saveLocalState(state);
+      pushToCloud(state);
+    }
+  },
+
+  clearChatHistory: async (windowId?: number): Promise<void> => {
+    const state = await api.getState();
+    if (!Array.isArray(state.chatMessages)) return;
+    if (windowId !== undefined) {
+      state.chatMessages = state.chatMessages.filter(m => m.windowId !== windowId);
+    } else {
+      state.chatMessages = [];
+    }
     saveLocalState(state);
     pushToCloud(state);
   }

@@ -4,6 +4,7 @@ import { useQueueSystem } from '../context/QueueContext';
 import { Employee, EmployeeStatus } from '../types';
 import { Button } from './shared/Button';
 import { Card } from './shared/Card';
+import { EmployeeChat } from './EmployeeChat';
 
 interface EmployeeViewProps {
     employee: Employee;
@@ -146,6 +147,9 @@ const EmployeeView: React.FC<EmployeeViewProps> = ({ employee }) => {
                      </div>
                 )}
             </Card>
+
+            {/* Direct Chat with Manager */}
+            <EmployeeChat employee={employee} windowData={assignedWindow} />
 
              <Card className="bg-slate-800 p-6 border border-slate-700">
                  <h3 className="text-xl font-semibold mb-2">إحصائيات الأداء</h3>
