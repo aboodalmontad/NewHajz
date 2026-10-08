@@ -1,33 +1,18 @@
-import express, { Request, Response } from 'express';
-import cors from 'cors';
+import express from 'express';
+import { createServer } from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
+import { createServer as createViteServer } from 'vite';
+import os from 'os';
 import path from 'path';
 import fs from 'fs';
-import os from 'os';
-import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
+import { ConnectedDevice, LanMessage, QueueSystemState, EmployeeStatus } from './types';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const PORT = 3000;
+const isProduction = process.env.NODE_ENV === 'production';
+const STATE_FILE = path.resolve(process.cwd(), 'data', 'queue-state.json');
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const app = express();
-
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-
-// Data Directory for persistence
-const DATA_DIR = path.resolve(__dirname, 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  } catch (e) {
-    console.error('Error creating data dir:', e);
-  }
-}
-const DATA_FILE = path.join(DATA_DIR, 'queue-state.json');
-
-// Default initial state
-const DEFAULT_STATE = {
+// Default queue system state
+const DEFAULT_STATE: QueueSystemState = {
   windows: [
     { id: 1, name: 'شباك 1', customTask: 'استقبال' },
     { id: 2, name: 'شباك 2', customTask: 'فتح حساب جديد' },
@@ -35,14 +20,15 @@ const DEFAULT_STATE = {
     { id: 4, name: 'شباك 4' },
   ],
   employees: [
-    { id: 1, name: 'أحمد', username: 'ahmad', password: '123', status: 'متاح', customersServed: 0 },
-    { id: 2, name: 'فاطمة', username: 'fatima', password: '123', status: 'متاح', customersServed: 0 },
-    { id: 3, name: 'يوسف', username: 'yousef', password: '123', status: 'متاح', customersServed: 0 },
-    { id: 4, name: 'ليلى', username: 'layla', password: '123', status: 'متاح', customersServed: 0 },
+    { id: 1, name: 'أحمد', username: 'ahmad', password: '123', status: EmployeeStatus.Available, customersServed: 0 },
+    { id: 2, name: 'فاطمة', username: 'fatima', password: '123', status: EmployeeStatus.Available, customersServed: 0 },
+    { id: 3, name: 'يوسف', username: 'yousef', password: '123', status: EmployeeStatus.Available, customersServed: 0 },
+    { id: 4, name: 'ليلى', username: 'layla', password: '123', status: EmployeeStatus.Available, customersServed: 0 },
   ],
   customers: [],
   queue: [],
   ticketCounter: 100,
+  roomPin: '8240',
   printerConfig: {
     paperWidth: '80mm',
     headerText: 'نظام الطابور الذكي',
@@ -52,398 +38,294 @@ const DEFAULT_STATE = {
     footerText: 'شكراً لزيارتكم',
     showDate: true,
     autoPrint: true
-  },
-  chatMessages: []
+  }
 };
 
-// Rooms storage in-memory with file backup
-const rooms = new Map<string, any>();
+// Ensure data folder exists
+if (!fs.existsSync(path.dirname(STATE_FILE))) {
+  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+}
 
-// Load state from file if exists
-const loadPersistedRooms = () => {
+// In-memory state cached with disk persistence
+let currentQueueState: QueueSystemState = DEFAULT_STATE;
+try {
+  if (fs.existsSync(STATE_FILE)) {
+    const raw = fs.readFileSync(STATE_FILE, 'utf-8');
+    currentQueueState = { ...DEFAULT_STATE, ...JSON.parse(raw) };
+  }
+} catch (e) {
+  console.warn('Could not read existing state file, using defaults');
+}
+
+function persistState(state: QueueSystemState) {
+  currentQueueState = state;
   try {
-    if (fs.existsSync(DATA_FILE)) {
-      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (typeof parsed === 'object' && parsed !== null) {
-        Object.entries(parsed).forEach(([code, state]) => {
-          rooms.set(code, state);
-        });
-      }
-    }
-  } catch (e) {
-    console.warn('Could not read state file, initializing fresh:', e);
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error persisting state:', err);
   }
+}
 
-  // Ensure default room exists
-  if (!rooms.has('default')) {
-    rooms.set('default', JSON.parse(JSON.stringify(DEFAULT_STATE)));
-  }
-};
-
-loadPersistedRooms();
-
-const persistRooms = () => {
-  try {
-    const obj: Record<string, any> = {};
-    rooms.forEach((val, key) => {
-      obj[key] = val;
-    });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(obj, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('Error persisting state to file:', e);
-  }
-};
-
-// SSE connections map: roomId -> Set of Response objects
-const sseSubscribers = new Map<string, Set<Response>>();
-
-const broadcastStateToRoom = (roomId: string, state: any) => {
-  const clients = sseSubscribers.get(roomId);
-  if (!clients || clients.size === 0) return;
-
-  const payload = `event: state\ndata: ${JSON.stringify(state)}\n\n`;
-  for (const client of clients) {
-    try {
-      client.write(payload);
-    } catch (e) {
-      clients.delete(client);
-    }
-  }
-};
-
-const getRoomState = (roomId?: string) => {
-  const key = (roomId && roomId.trim()) ? roomId.trim() : 'default';
-  if (!rooms.has(key)) {
-    // Clone default state for new room
-    const clone = JSON.parse(JSON.stringify(DEFAULT_STATE));
-    clone.syncId = key === 'default' ? undefined : key;
-    rooms.set(key, clone);
-    persistRooms();
-  }
-  return { key, state: rooms.get(key) };
-};
-
-// Detect local IPv4 addresses for LAN display
-const getLocalIpAddresses = () => {
+// Helper to get local IPv4 addresses on LAN
+function getLocalIpAddresses(): string[] {
   const interfaces = os.networkInterfaces();
   const addresses: string[] = [];
 
   for (const name of Object.keys(interfaces)) {
-    const netList = interfaces[name];
-    if (!netList) continue;
-    for (const net of netList) {
-      // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
-      if (net.family === 'IPv4' && !net.internal) {
-        addresses.push(net.address);
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        addresses.push(iface.address);
       }
     }
   }
+
+  // Fallback to localhost if no external LAN interface is found
+  if (addresses.length === 0) {
+    addresses.push('localhost');
+  }
+
   return addresses;
-};
+}
 
-// API ROUTES
-app.get('/api/network-info', (_req: Request, res: Response) => {
-  const localIps = getLocalIpAddresses();
-  const activeRooms = Array.from(rooms.keys()).filter(k => k !== 'default');
-  res.json({
-    localIps,
-    port: PORT,
-    activeRooms,
-    serverTime: Date.now()
-  });
-});
+async function startServer() {
+  const app = express();
+  app.use(express.json({ limit: '10mb' }));
 
-app.get('/api/queue/state', (req: Request, res: Response) => {
-  const syncId = req.query.syncId as string | undefined;
-  const { state } = getRoomState(syncId);
-  res.json(state);
-});
+  const server = createServer(app);
+  const wss = new WebSocketServer({ server, path: '/ws' });
 
-const getServicePrefix = (serviceName?: string): string => {
-  const name = (serviceName || '').toLowerCase();
-  if (name.includes('استقبال')) return 'A';
-  if (name.includes('حساب')) return 'B';
-  if (name.includes('عملاء')) return 'C';
-  if (name.includes('صراف') || name.includes('مالية') || name.includes('سحب')) return 'D';
-  return 'S';
-};
+  // Connected clients tracker
+  interface ClientSession {
+    ws: WebSocket;
+    device: ConnectedDevice;
+    clientIp: string;
+    lastPing: number;
+  }
+  const clients = new Map<string, ClientSession>();
 
-// Atomic customer ticket issuance to prevent any duplicates or race conditions
-app.post('/api/queue/customer/add', (req: Request, res: Response) => {
-  const { syncId, serviceName } = req.body;
-  const { key, state } = getRoomState(syncId);
+  function getDeviceList(): ConnectedDevice[] {
+    return Array.from(clients.values()).map(c => c.device);
+  }
 
-  if (!Array.isArray(state.customers)) state.customers = [];
-  if (!Array.isArray(state.queue)) state.queue = [];
-
-  // Determine the highest existing ticket number across all historical/active customers
-  let maxExisting = 99;
-  for (const c of state.customers) {
-    if (c && c.ticketNumber) {
-      const match = String(c.ticketNumber).match(/\d+$/);
-      if (match) {
-        const num = parseInt(match[0], 10);
-        if (!isNaN(num) && num > maxExisting) {
-          maxExisting = num;
-        }
+  function broadcast(msg: LanMessage, excludeDeviceId?: string) {
+    const data = JSON.stringify(msg);
+    clients.forEach((client, id) => {
+      if (excludeDeviceId && id === excludeDeviceId) return;
+      if (client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(data);
       }
+    });
+  }
+
+  function sendTo(deviceId: string, msg: LanMessage): boolean {
+    const client = clients.get(deviceId);
+    if (client && client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(JSON.stringify(msg));
+      return true;
     }
+    return false;
   }
 
-  // Ensure next ticket number is strictly greater than both maxExisting and current ticketCounter
-  const currentCounter = Number(state.ticketCounter) || 100;
-  const nextTicketNumber = Math.max(currentCounter, maxExisting + 1);
-  state.ticketCounter = nextTicketNumber + 1;
+  // WebSocket connection handler
+  wss.on('connection', (ws: WebSocket, req) => {
+    let currentDeviceId: string | null = null;
+    const remoteIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
 
-  const service = serviceName || 'خدمات عامة';
-  const prefix = getServicePrefix(service);
+    ws.on('message', (rawData: string) => {
+      try {
+        const msg: LanMessage = JSON.parse(rawData.toString());
 
-  const newCustomer = {
-    id: Date.now(),
-    ticketNumber: `${prefix}-${nextTicketNumber}`,
-    requestTime: new Date().toISOString(),
-    status: 'بالانتظار',
-    serviceName: service
-  };
+        switch (msg.type) {
+          case 'REGISTER_DEVICE': {
+            const dev = msg.device;
+            currentDeviceId = dev.id;
+            dev.ip = remoteIp.replace('::ffff:', '');
+            dev.lastSeen = Date.now();
+            dev.status = 'online';
 
-  state.customers.push(newCustomer);
-  state.queue.push(newCustomer.id);
+            clients.set(dev.id, {
+              ws,
+              device: dev,
+              clientIp: dev.ip,
+              lastPing: Date.now()
+            });
 
-  rooms.set(key, state);
-  persistRooms();
-  broadcastStateToRoom(key, state);
+            // Send full current state to newly joined client
+            ws.send(JSON.stringify({
+              type: 'STATE_UPDATE',
+              state: currentQueueState
+            }));
 
-  res.json({ success: true, customer: newCustomer, state });
-});
+            // Broadcast updated device list to everyone
+            const devList = getDeviceList();
+            broadcast({
+              type: 'DEVICE_LIST',
+              devices: devList
+            });
+            break;
+          }
 
-app.post('/api/queue/state', (req: Request, res: Response) => {
-  const syncId = (req.body.syncId || req.query.syncId) as string | undefined;
-  const incomingState = req.body.state || req.body;
-  if (!incomingState || typeof incomingState !== 'object') {
-    return res.status(400).json({ error: 'Invalid state body' });
-  }
+          case 'PING': {
+            const now = Date.now();
+            if (msg.toId) {
+              // Direct ping to another device
+              sendTo(msg.toId, msg);
+            } else {
+              // Ping to server/network
+              ws.send(JSON.stringify({
+                type: 'PONG',
+                pingId: msg.pingId,
+                fromId: 'SERVER',
+                toId: msg.fromId,
+                originalTimestamp: msg.timestamp,
+                serverTimestamp: now
+              }));
+            }
+            if (currentDeviceId && clients.has(currentDeviceId)) {
+              clients.get(currentDeviceId)!.lastPing = now;
+              clients.get(currentDeviceId)!.device.lastSeen = now;
+            }
+            break;
+          }
 
-  const { key } = getRoomState(syncId);
+          case 'PONG': {
+            // Forward pong response back to requesting device
+            sendTo(msg.toId, msg);
+            break;
+          }
 
-  // Guarantee that ticketCounter cannot be regressed if customers exist
-  if (Array.isArray(incomingState.customers)) {
-    let maxExisting = 99;
-    for (const c of incomingState.customers) {
-      if (c && c.ticketNumber) {
-        const match = String(c.ticketNumber).match(/\d+$/);
-        if (match) {
-          const num = parseInt(match[0], 10);
-          if (!isNaN(num) && num > maxExisting) {
-            maxExisting = num;
+          case 'CONFIRM_REQUEST': {
+            // Route confirmation request to target device (or all devices if no toDeviceId)
+            if (msg.toDeviceId) {
+              sendTo(msg.toDeviceId, msg);
+            } else {
+              broadcast(msg, msg.fromDevice.id);
+            }
+            break;
+          }
+
+          case 'CONFIRM_RESPONSE': {
+            // Forward ACK back to original requester
+            sendTo(msg.toDeviceId, msg);
+            break;
+          }
+
+          case 'STATE_UPDATE': {
+            // Authoritative state update
+            persistState(msg.state);
+            broadcast(msg, msg.sourceDeviceId);
+            break;
+          }
+
+          case 'CALL_NOTIFICATION': {
+            // Broadcast customer call notification to screens & employee devices
+            broadcast(msg);
+            break;
+          }
+
+          case 'BROADCAST_CHAT': {
+            broadcast(msg);
+            break;
           }
         }
-      }
-    }
-    const incomingCounter = Number(incomingState.ticketCounter) || 100;
-    if (incomingCounter <= maxExisting) {
-      incomingState.ticketCounter = maxExisting + 1;
-    }
-  }
-
-  rooms.set(key, incomingState);
-  persistRooms();
-  broadcastStateToRoom(key, incomingState);
-
-  res.json({ success: true, syncId: key });
-});
-
-// Direct chat message sending
-app.post('/api/queue/chat/send', (req: Request, res: Response) => {
-  const { syncId, windowId, senderType, senderName, text } = req.body;
-  if (!windowId || !text || !senderType) {
-    return res.status(400).json({ error: 'Missing chat parameters' });
-  }
-
-  const { key, state } = getRoomState(syncId);
-  if (!Array.isArray(state.chatMessages)) {
-    state.chatMessages = [];
-  }
-
-  const newMsg = {
-    id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    windowId: Number(windowId),
-    senderType,
-    senderName: senderName || (senderType === 'admin' ? 'الإدارة' : `شباك ${windowId}`),
-    text: String(text).trim(),
-    timestamp: Date.now(),
-    readByAdmin: senderType === 'admin',
-    readByWindow: senderType === 'window'
-  };
-
-  state.chatMessages.push(newMsg);
-  if (state.chatMessages.length > 500) {
-    state.chatMessages = state.chatMessages.slice(-500);
-  }
-
-  rooms.set(key, state);
-  persistRooms();
-  broadcastStateToRoom(key, state);
-
-  res.json({ success: true, message: newMsg });
-});
-
-// Mark chat messages as read
-app.post('/api/queue/chat/read', (req: Request, res: Response) => {
-  const { syncId, windowId, readerType } = req.body;
-  const { key, state } = getRoomState(syncId);
-
-  if (Array.isArray(state.chatMessages) && windowId) {
-    let changed = false;
-    const targetWinId = Number(windowId);
-    state.chatMessages.forEach((msg: any) => {
-      if (Number(msg.windowId) === targetWinId) {
-        if (readerType === 'admin' && !msg.readByAdmin) {
-          msg.readByAdmin = true;
-          changed = true;
-        } else if (readerType === 'window' && !msg.readByWindow) {
-          msg.readByWindow = true;
-          changed = true;
-        }
+      } catch (err) {
+        console.error('Error handling WebSocket message:', err);
       }
     });
 
-    if (changed) {
-      rooms.set(key, state);
-      persistRooms();
-      broadcastStateToRoom(key, state);
-    }
-  }
+    ws.on('close', () => {
+      if (currentDeviceId && clients.has(currentDeviceId)) {
+        clients.delete(currentDeviceId);
+        broadcast({
+          type: 'DEVICE_LEFT',
+          deviceId: currentDeviceId
+        });
+        broadcast({
+          type: 'DEVICE_LIST',
+          devices: getDeviceList()
+        });
+      }
+    });
 
-  res.json({ success: true });
-});
-
-// Broadcast announcement to all windows
-app.post('/api/queue/chat/broadcast', (req: Request, res: Response) => {
-  const { syncId, senderName, text } = req.body;
-  if (!text || !text.trim()) {
-    return res.status(400).json({ error: 'Missing announcement text' });
-  }
-
-  const { key, state } = getRoomState(syncId);
-  if (!Array.isArray(state.chatMessages)) {
-    state.chatMessages = [];
-  }
-
-  const windows = Array.isArray(state.windows) ? state.windows : [];
-  const trimmed = text.trim();
-
-  windows.forEach((win: any) => {
-    state.chatMessages.push({
-      id: `msg_bcast_${Date.now()}_${win.id}_${Math.random().toString(36).substring(2, 5)}`,
-      windowId: Number(win.id),
-      senderType: 'admin',
-      senderName: senderName || 'الإدارة (تعميم عام)',
-      text: `📢 [تعميم لكافة الشبابيك]: ${trimmed}`,
-      timestamp: Date.now(),
-      readByAdmin: true,
-      readByWindow: false
+    ws.on('error', (err) => {
+      console.warn('WebSocket client error:', err.message);
     });
   });
 
-  if (state.chatMessages.length > 500) {
-    state.chatMessages = state.chatMessages.slice(-500);
-  }
+  // REST API Endpoints
+  app.get('/api/network-info', (req, res) => {
+    const localIps = getLocalIpAddresses();
+    const hostHeader = req.headers.host || '';
+    const protocol = req.protocol || 'http';
+    
+    // Choose primary LAN IP (first non-localhost or localhost)
+    const primaryIp = localIps.find(ip => ip !== 'localhost') || localIps[0] || 'localhost';
+    const primaryLanUrl = hostHeader.includes(':') 
+      ? `${protocol}://${primaryIp}:${PORT}` 
+      : `${protocol}://${hostHeader}`;
 
-  rooms.set(key, state);
-  persistRooms();
-  broadcastStateToRoom(key, state);
+    res.json({
+      localIps,
+      port: PORT,
+      serverTime: Date.now(),
+      connectedClientsCount: clients.size,
+      connectedDevices: getDeviceList(),
+      roomPin: currentQueueState.roomPin || '8240',
+      primaryLanUrl
+    });
+  });
 
-  res.json({ success: true });
-});
+  app.get('/api/state', (_req, res) => {
+    res.json(currentQueueState);
+  });
 
-// Clear chat history
-app.post('/api/queue/chat/clear', (req: Request, res: Response) => {
-  const { syncId, windowId } = req.body;
-  const { key, state } = getRoomState(syncId);
-
-  if (Array.isArray(state.chatMessages)) {
-    if (windowId !== undefined && windowId !== null) {
-      const targetWinId = Number(windowId);
-      state.chatMessages = state.chatMessages.filter((m: any) => Number(m.windowId) !== targetWinId);
-    } else {
-      state.chatMessages = [];
-    }
-
-    rooms.set(key, state);
-    persistRooms();
-    broadcastStateToRoom(key, state);
-  }
-
-  res.json({ success: true });
-});
-
-// SSE Events stream endpoint for live real-time sync across devices on the LAN
-app.get('/api/queue/events', (req: Request, res: Response) => {
-  const syncId = req.query.syncId as string | undefined;
-  const { key, state } = getRoomState(syncId);
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders?.();
-
-  if (!sseSubscribers.has(key)) {
-    sseSubscribers.set(key, new Set());
-  }
-  const clientSet = sseSubscribers.get(key)!;
-  clientSet.add(res);
-
-  // Send current state immediately on connect
-  res.write(`event: state\ndata: ${JSON.stringify(state)}\n\n`);
-
-  // Keep alive ping every 15 seconds
-  const pingInterval = setInterval(() => {
+  app.post('/api/state', (req, res) => {
     try {
-      res.write(': keep-alive\n\n');
-    } catch (e) {
-      clearInterval(pingInterval);
+      const newState = req.body;
+      if (newState) {
+        persistState(newState);
+        // Broadcast update via WebSocket
+        broadcast({
+          type: 'STATE_UPDATE',
+          state: newState
+        });
+      }
+      res.json({ success: true, state: currentQueueState });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
-  }, 15000);
-
-  req.on('close', () => {
-    clearInterval(pingInterval);
-    clientSet.delete(res);
   });
-});
 
-// START SERVER
-async function startServer() {
-  const isDev = process.env.NODE_ENV !== 'production';
-
-  if (isDev) {
+  // In Development, attach Vite middleware
+  if (!isProduction) {
     const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: false,
-      },
-      appType: 'spa',
+      server: { middlewareMode: true },
+      appType: 'spa'
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    // Serve static files from build
+    const distPath = path.resolve(process.cwd(), 'dist');
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.resolve(distPath, 'index.html'));
+      });
+    }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    const localIps = getLocalIpAddresses();
-    console.log(`🚀 Smart Queue Server running on port ${PORT}`);
-    console.log(`📡 Localhost: http://localhost:${PORT}`);
-    localIps.forEach(ip => {
-      console.log(`🌐 Local Network (LAN): http://${ip}:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    const ips = getLocalIpAddresses();
+    console.log(`\n=================================================`);
+    console.log(`🚀 خادم الشبكة المحلية يعمل على المنفذ: ${PORT}`);
+    console.log(`📱 عناوين الشبكة المحلية (LAN Addresses):`);
+    ips.forEach(ip => {
+      console.log(`   - http://${ip}:${PORT}`);
     });
+    console.log(`=================================================\n`);
   });
 }
 
 startServer().catch(err => {
   console.error('Failed to start server:', err);
-  process.exit(1);
 });

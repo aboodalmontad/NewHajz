@@ -2,86 +2,15 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
   <head>
-    <script>
-      // Immediately suppress Vite HMR WebSocket errors in environments where HMR is disabled
-      (function() {
-        window.addEventListener('unhandledrejection', function(event) {
-          if (!event) return;
-          var reason = event.reason;
-          var msg = (reason && (reason.message || reason.stack || String(reason))) || '';
-          if (
-            msg.indexOf('WebSocket') !== -1 ||
-            msg.indexOf('vite:ws') !== -1 ||
-            msg.indexOf('closed without opened') !== -1
-          ) {
-            event.preventDefault();
-            event.stopImmediatePropagation && event.stopImmediatePropagation();
-            return false;
-          }
-        }, true);
-
-        window.addEventListener('error', function(event) {
-          var msg = (event && (event.message || '')) || '';
-          if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('closed without opened') !== -1) {
-            event.preventDefault();
-            event.stopImmediatePropagation && event.stopImmediatePropagation();
-            return false;
-          }
-        }, true);
-      })();
-    </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>نظام الطابور الذكي</title>
+    <title>نظام الربط المحلي وتأكيد الاتصال الذكي</title>
+    <meta name="description" content="نظام ربط الأجهزة بسهولة عبر الشبكة المحلية (LAN) مع أدوات تأكيد وفحص الاتصال اللحظي ومزامنة الشاشات والطوابير" />
+    <meta property="og:title" content="نظام الربط المحلي وتأكيد الاتصال الذكي" />
+    <meta property="og:description" content="نظام ربط الأجهزة بسهولة عبر الشبكة المحلية (LAN) مع أدوات تأكيد وفحص الاتصال اللحظي ومزامنة الشاشات والطوابير" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-      /* Highly visible, styled scrollbars for vertical and horizontal browsing */
-      ::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #0f172a;
-        border-radius: 6px;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #38bdf8;
-        border-radius: 6px;
-        border: 2px solid #0f172a;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #0284c7;
-      }
-      ::-webkit-scrollbar-corner {
-        background: #0f172a;
-      }
-      * {
-        scrollbar-width: thin;
-        scrollbar-color: #38bdf8 #0f172a;
-      }
-      .custom-scrollbar-amber {
-        scrollbar-color: #f59e0b #0f172a !important;
-      }
-      .custom-scrollbar-amber::-webkit-scrollbar-thumb {
-        background: #f59e0b !important;
-      }
-      .custom-scrollbar-amber::-webkit-scrollbar-thumb:hover {
-        background: #d97706 !important;
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client"
-  }
-}
-</script>
-</head>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
